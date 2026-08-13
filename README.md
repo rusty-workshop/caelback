@@ -1,5 +1,7 @@
 # caelback
 
+*(pronounced like "callback")*
+
 Snapshot and one-click restore for a [Caelestia](https://github.com/caelestia-dots/caelestia)
 setup, so you can go dotfile-hopping and come back to exactly what you had.
 
