@@ -34,7 +34,10 @@ combines a few known roots with a fuzzy scan:
   is located in `/var/cache/pacman/pkg`, `~/.cache/yay`, or
   `~/.cache/paru/clone` and copied into the snapshot, so restore doesn't need
   network or AUR access — unless a package wasn't cached anywhere on disk at
-  snapshot time, in which case it's flagged and skipped.
+  snapshot time, in which case it's flagged and skipped. Run
+  `caelback cache-missing` to fetch/build a tarball for anything currently
+  uncached (some AUR helpers don't retain build artifacts after install), then
+  take a fresh snapshot.
 - **systemd --user units** whose name contains "caelestia" or "livewall",
   along with whether each was enabled.
 - **sddm session entries** whose name contains "hyprland" (i.e. the ones
@@ -77,6 +80,16 @@ caelback doctor
 # Manually prune old snapshots, keeping the last N (snapshot already
 # does this automatically; default keep is 5)
 caelback prune --keep 5
+
+# Fetch/build a tarball for any installed package that isn't cached
+# anywhere on disk yet, so the next snapshot can restore it offline too
+caelback cache-missing
+
+# Install a systemd --user timer that runs `caelback snapshot`
+# automatically (default: every 14 days)
+caelback install-timer
+caelback install-timer --interval-days 7   # or any other cadence
+caelback uninstall-timer                    # remove it again
 ```
 
 Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass

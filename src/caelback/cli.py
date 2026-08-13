@@ -1,16 +1,20 @@
-"""caelback CLI: snapshot, list, show, restore, prune, doctor."""
+"""caelback CLI: snapshot, list, show, restore, prune, doctor, timer install."""
 
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
-from . import retention
+from . import packages, retention
 from .manifest import Manifest
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
-from .util import human_size
+from .util import confirm, eprint, human_size, run
+
+TIMER_SERVICE_NAME = "caelback-snapshot.service"
+TIMER_NAME = "caelback-snapshot.timer"
 
 
 def cmd_snapshot(args: argparse.Namespace) -> int:
@@ -109,6 +113,103 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_cache_missing(args: argparse.Namespace) -> int:
+    missing = [p for p in packages.resolve_packages() if p.cached_file is None]
+    if not missing:
+        print("Every caelestia/quickshell package already has a cached tarball.")
+        return 0
+
+    print(f"{len(missing)} package(s) have no cached tarball on disk — restore would skip them:")
+    for p in missing:
+        print(f"  - {p.name} {p.version}")
+
+    if not args.yes and not confirm(
+        "\nFetch/rebuild them now via `yay -Sw` (no install; may prompt for your sudo "
+        "password if build deps are missing)?"
+    ):
+        print("\nSkipped. Run manually any time:")
+        print("  yay -Sw " + " ".join(p.name for p in missing))
+        return 0
+
+    ok = True
+    for p in missing:
+        print(f"\n== yay -Sw {p.name} ==")
+        result = subprocess.run(["yay", "-Sw", p.name])
+        if result.returncode != 0:
+            eprint(f"Failed to cache {p.name} (exit {result.returncode})")
+            ok = False
+
+    print("\nRun `caelback snapshot` again to capture the newly cached tarball(s).")
+    return 0 if ok else 1
+
+
+def _caelback_bin() -> Path:
+    # LiveWall's installer learned this the hard way: shutil.which() can resolve to a
+    # project-local .venv/bin when invoked via `uv run` from inside a repo checkout.
+    # `uv tool install --editable` always symlinks the real entrypoint to this fixed path,
+    # which is what a standalone systemd unit needs.
+    return Path.home() / ".local/bin/caelback"
+
+
+def cmd_install_timer(args: argparse.Namespace) -> int:
+    bin_path = _caelback_bin()
+    if not bin_path.exists():
+        eprint(f"{bin_path} not found — install with `uv tool install --editable .` first.")
+        return 1
+
+    backup_root = Path(args.backup_root)
+    exec_start = f"{bin_path} snapshot"
+    if backup_root != DEFAULT_BACKUP_ROOT:
+        exec_start += f" --backup-root {backup_root}"
+
+    unit_dir = Path.home() / ".config/systemd/user"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+
+    (unit_dir / TIMER_SERVICE_NAME).write_text(
+        "[Unit]\n"
+        "Description=caelback snapshot (Caelestia backup)\n"
+        "\n"
+        "[Service]\n"
+        "Type=oneshot\n"
+        f"ExecStart={exec_start}\n"
+    )
+    (unit_dir / TIMER_NAME).write_text(
+        "[Unit]\n"
+        f"Description=Run caelback snapshot every {args.interval_days} day(s)\n"
+        "\n"
+        "[Timer]\n"
+        "OnBootSec=10min\n"
+        f"OnUnitActiveSec={args.interval_days}d\n"
+        "Persistent=true\n"
+        "\n"
+        "[Install]\n"
+        "WantedBy=timers.target\n"
+    )
+
+    run(["systemctl", "--user", "daemon-reload"])
+    run(["systemctl", "--user", "enable", "--now", TIMER_NAME])
+
+    print(f"Installed and enabled {TIMER_NAME} — snapshots every {args.interval_days} day(s) from now on.")
+    print("Persistent=true: if the machine is off when one is due, it runs shortly after the next boot instead of being skipped.")
+    result = subprocess.run(
+        ["systemctl", "--user", "list-timers", TIMER_NAME, "--no-pager"], text=True, capture_output=True
+    )
+    print(result.stdout)
+    return 0
+
+
+def cmd_uninstall_timer(args: argparse.Namespace) -> int:
+    subprocess.run(["systemctl", "--user", "disable", "--now", TIMER_NAME], capture_output=True)
+    unit_dir = Path.home() / ".config/systemd/user"
+    for name in (TIMER_SERVICE_NAME, TIMER_NAME):
+        p = unit_dir / name
+        if p.exists():
+            p.unlink()
+    run(["systemctl", "--user", "daemon-reload"])
+    print(f"Removed {TIMER_NAME} and {TIMER_SERVICE_NAME}.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     # --backup-root lives only on the subparsers (via this parent), not on the top-level
     # parser too -- argparse subparsers write into the same namespace as the top-level
@@ -156,6 +257,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", parents=[common], help="Verify a snapshot's integrity")
     p_doctor.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_cache = sub.add_parser(
+        "cache-missing",
+        help="Fetch/build tarballs for installed packages with no cached copy, so restore can use them offline",
+    )
+    p_cache.add_argument("--yes", "-y", action="store_true", help="Don't ask for confirmation")
+    p_cache.set_defaults(func=cmd_cache_missing)
+
+    p_install_timer = sub.add_parser(
+        "install-timer", parents=[common], help="Install a systemd --user timer that runs `caelback snapshot` periodically"
+    )
+    p_install_timer.add_argument(
+        "--interval-days", type=int, default=14, help="Days between automatic snapshots (default: 14)"
+    )
+    p_install_timer.set_defaults(func=cmd_install_timer)
+
+    p_uninstall_timer = sub.add_parser("uninstall-timer", help="Remove the timer installed by install-timer")
+    p_uninstall_timer.set_defaults(func=cmd_uninstall_timer)
 
     return parser
 
