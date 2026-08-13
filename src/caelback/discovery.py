@@ -11,6 +11,7 @@ updating this file.
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -155,6 +156,27 @@ def discover_sddm_sessions() -> list[str]:
         for p in SDDM_SESSIONS_DIR.iterdir()
         if p.suffix == ".desktop" and SDDM_SESSION_PATTERN in p.name.lower()
     )
+
+
+def is_caelestia_present() -> bool:
+    """Whether Caelestia itself is actually installed/configured right now.
+
+    Deliberately checks only for "caelestia", not the broader
+    PACKAGE_NAME_PATTERNS (which also matches "quickshell") -- quickshell is a
+    generic Wayland shell toolkit that other things on this machine (e.g. a
+    separate from-scratch shell project) can depend on independently of
+    Caelestia, so its presence alone would be a false positive. Used to gate
+    the periodic snapshot timer so it doesn't keep taking -- and pruning
+    away -- snapshots after Caelestia has actually been removed.
+    """
+    if (HOME / ".config/caelestia").exists():
+        return True
+    result = subprocess.run(["pacman", "-Q"], text=True, capture_output=True)
+    for line in result.stdout.splitlines():
+        name = line.split(maxsplit=1)[0] if line else ""
+        if "caelestia" in name.lower():
+            return True
+    return False
 
 
 def discover() -> Discovery:

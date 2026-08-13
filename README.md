@@ -98,6 +98,18 @@ Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass
 has a `manifest.json` (machine-readable) and `MANIFEST.md` (human-readable)
 describing exactly what's inside.
 
+## If Caelestia isn't installed
+
+`caelback snapshot` checks first whether Caelestia actually looks
+installed (`~/.config/caelestia` exists, or some installed package name
+contains "caelestia" — deliberately *not* just "quickshell", since other
+things can depend on that toolkit independently of Caelestia). If not, it
+skips without creating anything and exits cleanly (`0`), rather than
+snapshotting an empty setup and letting auto-pruning eventually push out
+the one real snapshot you'd actually want to restore from. This is what
+makes `install-timer` safe to leave running indefinitely, including after
+you've moved on to something else. Pass `--force` to snapshot anyway.
+
 ## Restore behavior
 
 - Reinstalls the exact cached package versions via `pacman -U` (one sudo

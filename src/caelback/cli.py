@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import packages, retention
+from . import discovery, packages, retention
 from .manifest import Manifest
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
@@ -18,6 +18,16 @@ TIMER_NAME = "caelback-snapshot.timer"
 
 
 def cmd_snapshot(args: argparse.Namespace) -> int:
+    if not args.force and not discovery.is_caelestia_present():
+        print(
+            "Caelestia doesn't appear to be installed on this machine (no "
+            "~/.config/caelestia and no installed package matching \"caelestia\") -- "
+            "skipping. This is deliberate: taking (and auto-pruning) snapshots after "
+            "Caelestia is gone would eventually push out the last real snapshot you'd "
+            "want to restore from. Pass --force to snapshot anyway."
+        )
+        return 0
+
     backup_root = Path(args.backup_root)
     print(f"Scanning system and taking snapshot into {backup_root} ...")
     snap_dir = take_snapshot(backup_root)
@@ -234,6 +244,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=retention.DEFAULT_KEEP,
         help=f"Keep only the last N snapshots after this one (default: {retention.DEFAULT_KEEP}, 0 disables pruning)",
+    )
+    p_snap.add_argument(
+        "--force",
+        action="store_true",
+        help="Take a snapshot even if Caelestia doesn't appear to be installed",
     )
     p_snap.set_defaults(func=cmd_snapshot)
 
