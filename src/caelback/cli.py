@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import discovery, packages, retention
+from . import discovery, layers, packages, retention
 from .diff import diff_manifests, render_diff
 from .manifest import Manifest
 from .restore import restore_snapshot
@@ -185,6 +185,29 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_reclaim(args: argparse.Namespace) -> int:
+    unexpected = layers.find_unexpected_layer_owners()
+    if not unexpected:
+        print("No unexpected processes found drawing a Hyprland layer.")
+        return 0
+
+    print(f"{len(unexpected)} process(es) drawing a Hyprland layer that don't look like Caelestia's own:")
+    for o in unexpected:
+        print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+
+    if args.dry_run:
+        print("(dry run — not killing anything)")
+        return 0
+
+    if not args.yes and not confirm("\nKill these?"):
+        print("Skipped.")
+        return 0
+
+    layers.kill_owners(unexpected)
+    print(f"Killed {len(unexpected)} process(es).")
+    return 0
+
+
 def cmd_cache_missing(args: argparse.Namespace) -> int:
     missing = [p for p in packages.resolve_packages() if p.cached_file is None]
     if not missing:
@@ -347,6 +370,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", parents=[common], help="Verify a snapshot's integrity")
     p_doctor.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_reclaim = sub.add_parser(
+        "reclaim",
+        help="Kill leftover processes drawing a Hyprland layer that don't look like Caelestia's own",
+    )
+    p_reclaim.add_argument("--yes", "-y", action="store_true", help="Don't ask for confirmation")
+    p_reclaim.add_argument("--dry-run", action="store_true", help="List what would be killed without killing it")
+    p_reclaim.set_defaults(func=cmd_reclaim)
 
     p_cache = sub.add_parser(
         "cache-missing",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from . import discovery
+from . import discovery, layers
 from .manifest import Manifest, ManifestPackage
 from .util import confirm, copy_path, eprint, move_aside, run
 
@@ -84,6 +84,14 @@ def print_plan(m: Manifest) -> None:
         print(f"sddm session entries to restore (needs sudo): {', '.join(m.sddm_sessions)}")
         print()
 
+    unexpected = layers.find_unexpected_layer_owners()
+    if unexpected:
+        print(f"Leftover processes currently drawing a Hyprland layer, not part of Caelestia ({len(unexpected)}):")
+        for o in unexpected:
+            print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+        print("  These will be offered for killing after the restore, so they stop drawing over Caelestia.")
+        print()
+
     print("Anything currently at a destination path is moved aside as <path>.pre-restore-<timestamp>, not deleted.")
 
 
@@ -103,11 +111,31 @@ def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False
     _restore_paths(m, snap_dir)
     _restore_systemd_units(m, snap_dir)
     _restore_sddm_sessions(m, snap_dir)
+    _reclaim_layers(yes=yes)
 
     print()
-    print("Restore complete. Log out and select a Hyprland session at the sddm login screen.")
+    print("Restore complete. For a fully clean state (nothing left running from wherever you")
+    print("hopped to), log out and back in through a Hyprland session at the sddm login screen")
+    print("rather than staying in the current one.")
     print("Anything that existed at a destination before restore was preserved alongside it")
     print("with a .pre-restore-<timestamp> suffix, not deleted.")
+
+
+def _reclaim_layers(*, yes: bool) -> None:
+    unexpected = layers.find_unexpected_layer_owners()
+    if not unexpected:
+        return
+
+    print(f"\n== {len(unexpected)} leftover process(es) still drawing a Hyprland layer ==")
+    for o in unexpected:
+        print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+
+    if not yes and not confirm("Kill these? (they're likely autostart leftovers from whatever was hopped to)"):
+        print("Left running. Kill manually, or a full log out/in will clear them too.")
+        return
+
+    layers.kill_owners(unexpected)
+    print(f"Killed {len(unexpected)} process(es).")
 
 
 def _restore_packages(m: Manifest, snap_dir: Path) -> None:

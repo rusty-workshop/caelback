@@ -98,6 +98,12 @@ caelback cache-missing
 caelback install-timer
 caelback install-timer --interval-days 7   # or any other cadence
 caelback uninstall-timer                    # remove it again
+
+# Kill leftover processes still drawing a Hyprland layer (bar, wallpaper
+# daemon, etc.) that don't look like they belong to Caelestia -- also
+# runs automatically as the last step of `restore`
+caelback reclaim
+caelback reclaim --dry-run
 ```
 
 Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass
@@ -158,7 +164,27 @@ snapshot right away.
   enabled at snapshot time.
 - sddm session entries are copied into `/usr/share/wayland-sessions/` (one
   sudo prompt).
+- As a final step, checks `hyprctl layers` for anything holding a
+  background/bar/overlay layer surface that doesn't look like Caelestia's
+  own (see "Leftover processes" below) and offers to kill it.
 - Nothing outside of what's listed in the snapshot's manifest is touched.
+
+## Leftover processes from whatever you hopped to
+
+Restoring config files doesn't stop a process another desktop environment's
+autostart already spawned — a bar or wallpaper daemon can keep drawing over
+Caelestia's own layers even after everything on disk is back to normal,
+since Hyprland doesn't re-run `exec-once` or kill existing processes on a
+config reload. `caelback` checks `hyprctl layers` (Wayland layer-shell
+surfaces — bars, wallpaper daemons, overlays; distinct from regular app
+windows) for anything whose owning process doesn't mention
+caelestia/quickshell/mpvpaper/livewall, and offers to kill it. This runs
+automatically at the end of `restore`, or standalone via `caelback reclaim`.
+It's pattern-based rather than a hardcoded list of "known bad" rice names,
+so it should catch whatever you hop to next too, not just one specific
+project. For a fully clean slate, logging out and back in through a
+Hyprland session works too — it just requires actually doing that instead
+of staying in the current session.
 
 ## License
 
