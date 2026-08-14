@@ -177,14 +177,26 @@ Caelestia's own layers even after everything on disk is back to normal,
 since Hyprland doesn't re-run `exec-once` or kill existing processes on a
 config reload. `caelback` checks `hyprctl layers` (Wayland layer-shell
 surfaces — bars, wallpaper daemons, overlays; distinct from regular app
-windows) for anything whose owning process doesn't mention
-caelestia/quickshell/mpvpaper/livewall, and offers to kill it. This runs
-automatically at the end of `restore`, or standalone via `caelback reclaim`.
-It's pattern-based rather than a hardcoded list of "known bad" rice names,
-so it should catch whatever you hop to next too, not just one specific
-project. For a fully clean slate, logging out and back in through a
-Hyprland session works too — it just requires actually doing that instead
-of staying in the current session.
+windows) for anything whose owning process doesn't match Caelestia's own
+ecosystem, and offers to kill it. This runs automatically at the end of
+`restore`, or standalone via `caelback reclaim`.
+
+The actual safety check is deny-by-default and pattern-based, not a
+hardcoded list of "known bad" rice names — anything holding a layer that
+doesn't mention `caelestia`/`quickshell`/`mpvpaper`/`livewall` (or `dunst`,
+this machine's own standing notification daemon) gets flagged, whatever
+it's called, so it catches whatever you hop to *next* too. On top of that,
+a separate, purely cosmetic lookup recognizes common tools by name — Waybar,
+HyprPanel, Ironbar, Polybar, AGS/Astal, eww, Fabric-based bars, swaybg,
+swww, hyprpaper, wpaperd, hyprlock, swaylock, gtklock, wlogout, rofi, wofi,
+fuzzel, mako, SwayNC, and the specific `mewline`/`awww` pair from the
+incident that prompted this — so the confirmation prompt names what it
+found instead of showing a bare command line. Anything not on that list
+still gets flagged and killable, just without a friendly name.
+
+For a fully clean slate, logging out and back in through a Hyprland session
+works too — it just requires actually doing that instead of staying in the
+current session.
 
 ## License
 

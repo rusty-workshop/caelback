@@ -88,7 +88,7 @@ def print_plan(m: Manifest) -> None:
     if unexpected:
         print(f"Leftover processes currently drawing a Hyprland layer, not part of Caelestia ({len(unexpected)}):")
         for o in unexpected:
-            print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+            print(f"  - {layers.format_owner(o)}")
         print("  These will be offered for killing after the restore, so they stop drawing over Caelestia.")
         print()
 
@@ -128,7 +128,7 @@ def _reclaim_layers(*, yes: bool) -> None:
 
     print(f"\n== {len(unexpected)} leftover process(es) still drawing a Hyprland layer ==")
     for o in unexpected:
-        print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+        print(f"  - {layers.format_owner(o)}")
 
     if not yes and not confirm("Kill these? (they're likely autostart leftovers from whatever was hopped to)"):
         print("Left running. Kill manually, or a full log out/in will clear them too.")

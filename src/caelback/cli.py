@@ -193,7 +193,7 @@ def cmd_reclaim(args: argparse.Namespace) -> int:
 
     print(f"{len(unexpected)} process(es) drawing a Hyprland layer that don't look like Caelestia's own:")
     for o in unexpected:
-        print(f"  - pid {o.pid} ({o.namespace}): {o.cmdline}")
+        print(f"  - {layers.format_owner(o)}")
 
     if args.dry_run:
         print("(dry run — not killing anything)")
