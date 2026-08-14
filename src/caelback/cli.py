@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import discovery, packages, retention
+from .diff import diff_manifests, render_diff
 from .manifest import Manifest
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
@@ -29,11 +30,26 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
         return 0
 
     backup_root = Path(args.backup_root)
+    prev_snap = retention.latest_snapshot(backup_root)  # capture before this run adds a new one
+    prev_manifest = Manifest.load(prev_snap) if prev_snap is not None else None
+
     print(f"Scanning system and taking snapshot into {backup_root} ...")
     snap_dir = take_snapshot(backup_root)
     m = Manifest.load(snap_dir)
     print(f"Snapshot {m.name} complete ({human_size(m.total_size_bytes())}, {len(m.packages)} package(s)).")
     print(f"  {snap_dir}")
+
+    if prev_manifest is not None:
+        d = diff_manifests(prev_manifest, m)
+        if not d.is_empty():
+            print(f"\n⚠ Changed since {prev_manifest.name}:")
+            print(render_diff(d))
+            print(
+                "  (Not blocking this snapshot -- could be a legitimate update. But if this "
+                "wasn't expected (e.g. mid dotfile-hop), run `caelback star <a known-good "
+                "snapshot>` so restore/show/doctor won't default to this one.)"
+            )
+
     if args.keep > 0:
         removed = retention.prune(backup_root, keep=args.keep)
         if removed:
@@ -47,16 +63,31 @@ def cmd_list(args: argparse.Namespace) -> int:
     if not snaps:
         print(f"No snapshots found under {backup_root}")
         return 0
+    starred = retention.get_starred(backup_root)
     for snap in snaps:
         m = Manifest.load(snap)
-        print(f"{m.name}  {human_size(m.total_size_bytes()):>10}  {len(m.packages)} pkgs  {snap}")
+        marker = "  ★" if snap.name == starred else ""
+        print(f"{m.name}  {human_size(m.total_size_bytes()):>10}  {len(m.packages)} pkgs  {snap}{marker}")
     return 0
+
+
+def _resolve_and_announce(name: str | None, backup_root: Path) -> Path:
+    """Resolve a snapshot name, printing which one was picked and why when
+    the caller didn't specify one explicitly (starred vs. most recent)."""
+    snap = retention.resolve_snapshot(name, backup_root)
+    if name is None:
+        starred = retention.get_starred(backup_root)
+        if starred == snap.name:
+            print(f"(using starred snapshot: {snap.name})")
+        else:
+            print(f"(using most recent snapshot: {snap.name})")
+    return snap
 
 
 def cmd_show(args: argparse.Namespace) -> int:
     backup_root = Path(args.backup_root)
     try:
-        snap = retention.resolve_snapshot(args.name, backup_root)
+        snap = _resolve_and_announce(args.name, backup_root)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -67,7 +98,7 @@ def cmd_show(args: argparse.Namespace) -> int:
 def cmd_restore(args: argparse.Namespace) -> int:
     backup_root = Path(args.backup_root)
     try:
-        snap = retention.resolve_snapshot(args.name, backup_root)
+        snap = _resolve_and_announce(args.name, backup_root)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -85,10 +116,41 @@ def cmd_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_star(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    if args.name is not None:
+        try:
+            snap = retention.resolve_snapshot(args.name, backup_root)
+        except FileNotFoundError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+    else:
+        snap = retention.latest_snapshot(backup_root)
+        if snap is None:
+            print(f"No snapshots found under {backup_root}", file=sys.stderr)
+            return 1
+    retention.set_starred(backup_root, snap.name)
+    print(
+        f"★ Starred {snap.name} — now preferred by default for restore/show/doctor "
+        "(instead of 'most recent'), and exempt from auto-pruning."
+    )
+    return 0
+
+
+def cmd_unstar(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    if retention.get_starred(backup_root) is None:
+        print("Nothing is starred.")
+        return 0
+    retention.clear_starred(backup_root)
+    print("Unstarred. restore/show/doctor will default to the most recent snapshot again.")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     backup_root = Path(args.backup_root)
     try:
-        snap = retention.resolve_snapshot(args.name, backup_root)
+        snap = _resolve_and_announce(args.name, backup_root)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -268,6 +330,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_prune = sub.add_parser("prune", parents=[common], help="Delete old snapshots, keeping the last N")
     p_prune.add_argument("--keep", type=int, default=retention.DEFAULT_KEEP)
     p_prune.set_defaults(func=cmd_prune)
+
+    p_star = sub.add_parser(
+        "star",
+        parents=[common],
+        help="Mark a snapshot as the preferred default for restore/show/doctor, exempt from auto-pruning",
+    )
+    p_star.add_argument("name", nargs="?", default=None, help="Snapshot name (default: the current latest)")
+    p_star.set_defaults(func=cmd_star)
+
+    p_unstar = sub.add_parser(
+        "unstar", parents=[common], help="Remove the star, reverting to 'most recent' as the default"
+    )
+    p_unstar.set_defaults(func=cmd_unstar)
 
     p_doctor = sub.add_parser("doctor", parents=[common], help="Verify a snapshot's integrity")
     p_doctor.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")

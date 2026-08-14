@@ -6,20 +6,62 @@ import subprocess
 from pathlib import Path
 
 from . import discovery
-from .manifest import Manifest
+from .manifest import Manifest, ManifestPackage
 from .util import confirm, copy_path, eprint, move_aside, run
+
+
+def _installed_version(name: str) -> str | None:
+    result = subprocess.run(["pacman", "-Q", name], text=True, capture_output=True)
+    if result.returncode != 0:
+        return None
+    parts = result.stdout.strip().split(maxsplit=1)
+    return parts[1] if len(parts) == 2 else None
+
+
+def _would_downgrade(installed: str, snapshot_version: str) -> bool:
+    """True if installing snapshot_version over installed would be a downgrade."""
+    result = subprocess.run(["vercmp", snapshot_version, installed], text=True, capture_output=True)
+    try:
+        return int(result.stdout.strip()) < 0
+    except ValueError:
+        return False  # can't tell -- don't block on an unparseable result
+
+
+def categorize_packages(
+    m: Manifest,
+) -> tuple[list[ManifestPackage], list[tuple[ManifestPackage, str]], list[ManifestPackage]]:
+    """Split a manifest's packages into (to_install, skipped_would_downgrade, uncached).
+
+    Shared by print_plan and _restore_packages so --dry-run's preview always
+    matches what a real restore will actually do.
+    """
+    cached = [p for p in m.packages if p.cached and p.cached_pkg]
+    uncached = [p for p in m.packages if not p.cached]
+
+    to_install = []
+    skipped_newer = []
+    for p in cached:
+        installed = _installed_version(p.name)
+        if installed is not None and _would_downgrade(installed, p.version):
+            skipped_newer.append((p, installed))
+        else:
+            to_install.append(p)
+    return to_install, skipped_newer, uncached
 
 
 def print_plan(m: Manifest) -> None:
     print(f"Snapshot: {m.name}  (taken {m.created_at} on {m.hostname})")
     print()
 
-    cached = [p for p in m.packages if p.cached]
-    uncached = [p for p in m.packages if not p.cached]
-    if cached:
-        print(f"Packages to reinstall from cached tarballs ({len(cached)}):")
-        for p in cached:
+    to_install, skipped_newer, uncached = categorize_packages(m)
+    if to_install:
+        print(f"Packages to reinstall from cached tarballs ({len(to_install)}):")
+        for p in to_install:
             print(f"  - {p.name} {p.version}")
+    if skipped_newer:
+        print(f"Packages skipped — currently installed is newer, won't downgrade ({len(skipped_newer)}):")
+        for p, installed in skipped_newer:
+            print(f"  - {p.name}: installed {installed}, snapshot has {p.version}")
     if uncached:
         print(f"Packages NOT cached — will be skipped, reinstall manually if needed ({len(uncached)}):")
         for p in uncached:
@@ -69,16 +111,20 @@ def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False
 
 
 def _restore_packages(m: Manifest, snap_dir: Path) -> None:
-    cached = [p for p in m.packages if p.cached and p.cached_pkg]
-    uncached = [p for p in m.packages if not p.cached]
+    to_install, skipped_newer, uncached = categorize_packages(m)
 
-    if cached:
-        print(f"\n== Reinstalling {len(cached)} package(s) from cached tarballs ==")
-        paths = [str(snap_dir / p.cached_pkg) for p in cached]
+    if to_install:
+        print(f"\n== Reinstalling {len(to_install)} package(s) from cached tarballs ==")
+        paths = [str(snap_dir / p.cached_pkg) for p in to_install]
         try:
             run(["pacman", "-U", "--needed", *paths], sudo=True)
         except subprocess.CalledProcessError as exc:
             eprint(f"pacman -U failed: {exc}")
+
+    if skipped_newer:
+        print("\nSkipped — currently installed version is newer than the snapshot's, not downgrading:")
+        for p, installed in skipped_newer:
+            print(f"  - {p.name}: installed {installed}, snapshot has {p.version}")
 
     if uncached:
         print("\nThe following packages were not cached at snapshot time and were skipped:")

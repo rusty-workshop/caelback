@@ -83,6 +83,12 @@ caelback doctor
 # does this automatically; default keep is 5)
 caelback prune --keep 5
 
+# Mark a snapshot as the one restore/show/doctor should default to,
+# instead of "most recent" -- and exempt it from auto-pruning forever
+caelback star                        # star the current latest
+caelback star 2026-08-14_134602      # star a specific one
+caelback unstar                      # back to defaulting on "most recent"
+
 # Fetch/build a tarball for any installed package that isn't cached
 # anywhere on disk yet, so the next snapshot can restore it offline too
 caelback cache-missing
@@ -112,11 +118,39 @@ the one real snapshot you'd actually want to restore from. This is what
 makes `install-timer` safe to leave running indefinitely, including after
 you've moved on to something else. Pass `--force` to snapshot anyway.
 
+## Starring a snapshot
+
+If you dotfile-hop and something else gets snapshotted while you're mid-hop
+(e.g. the `install-timer` timer fires, or you run `caelback snapshot`
+without thinking), that snapshot becomes "latest" — and a bare
+`caelback restore` afterward would restore *that*, not your last actually-good
+Caelestia state. `caelback star <name>` pins a specific snapshot as the
+default for `restore`/`show`/`doctor` instead of "most recent," and that
+snapshot is permanently exempt from `--keep` auto-pruning regardless of its
+age. `caelback unstar` reverts to defaulting on "most recent." `caelback
+list` marks the starred one with `★`, and every command that resolved a
+snapshot implicitly (no name given) prints which one it picked and why.
+
+## Detecting an unexpected snapshot
+
+Every `caelback snapshot` diffs itself against the *previous* snapshot and
+prints a warning if anything changed substantially — new or disappeared
+paths, a path's size changing by more than 15%, package version changes,
+or systemd/sddm entries appearing or disappearing. It doesn't block the
+snapshot (could be a legitimate Caelestia update) but it makes a
+mid-dotfile-hop snapshot (or anything else unexpected) impossible to miss
+in the terminal output, instead of silently becoming "latest" weeks later.
+If you see this and it wasn't expected, `caelback star` your last known-good
+snapshot right away.
+
 ## Restore behavior
 
 - Reinstalls the exact cached package versions via `pacman -U` (one sudo
-  prompt). Anything that wasn't cached at snapshot time is skipped with a
-  warning instead of silently pulling whatever's newest.
+  prompt) — **but only for packages that wouldn't be a downgrade**. If a
+  package has been legitimately updated since the snapshot was taken (via
+  `vercmp` against what's currently installed), it's skipped rather than
+  silently rolled back to the older cached version. Anything that wasn't
+  cached at snapshot time is also skipped, with a warning.
 - Anything already at a destination path is moved aside as
   `<path>.pre-restore-<timestamp>` rather than deleted, so a restore is
   never destructive to whatever you were trying instead.
