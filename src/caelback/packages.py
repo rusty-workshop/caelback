@@ -53,3 +53,20 @@ def resolve_packages() -> list[PackageInfo]:
     for pkg in pkgs:
         pkg.cached_file = find_cached_tarball(pkg.name, pkg.version)
     return pkgs
+
+
+def installed_version(name: str) -> str | None:
+    result = subprocess.run(["pacman", "-Q", name], text=True, capture_output=True)
+    if result.returncode != 0:
+        return None
+    parts = result.stdout.strip().split(maxsplit=1)
+    return parts[1] if len(parts) == 2 else None
+
+
+def would_downgrade(installed: str, candidate_version: str) -> bool:
+    """True if installing candidate_version over installed would be a downgrade."""
+    result = subprocess.run(["vercmp", candidate_version, installed], text=True, capture_output=True)
+    try:
+        return int(result.stdout.strip()) < 0
+    except ValueError:
+        return False  # can't tell -- don't block on an unparseable result

@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .discovery import CAELBACK_ARTIFACT_MARKER
 from .util import human_size
 
 MANIFEST_VERSION = 1
@@ -46,7 +47,16 @@ class Manifest:
     packages: list[ManifestPackage] = field(default_factory=list)
 
     def all_path_entries(self) -> list[ManifestEntry]:
-        return self.config_dirs + self.state_dirs + self.extra_matches
+        # Old snapshots taken before this filter existed could still have
+        # caelback's own *.pre-restore-* artifacts baked into extra_matches
+        # (they matched the "caelestia" fuzzy scan before discovery.py
+        # started excluding them) -- filter them out here too so restoring
+        # from one of those older snapshots can't resurrect stale clutter.
+        return [
+            e
+            for e in self.config_dirs + self.state_dirs + self.extra_matches
+            if CAELBACK_ARTIFACT_MARKER not in e.src
+        ]
 
     def total_size_bytes(self) -> int:
         return sum(e.size_bytes for e in self.all_path_entries())

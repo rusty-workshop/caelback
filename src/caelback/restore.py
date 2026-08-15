@@ -2,29 +2,49 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
-from . import discovery, layers
+from . import discovery, layers, packages, verify
 from .manifest import Manifest, ManifestPackage
 from .util import confirm, copy_path, eprint, move_aside, run
 
-
-def _installed_version(name: str) -> str | None:
-    result = subprocess.run(["pacman", "-Q", name], text=True, capture_output=True)
-    if result.returncode != 0:
-        return None
-    parts = result.stdout.strip().split(maxsplit=1)
-    return parts[1] if len(parts) == 2 else None
+RESTORE_LOG_FILE = "last-restore.json"
 
 
-def _would_downgrade(installed: str, snapshot_version: str) -> bool:
-    """True if installing snapshot_version over installed would be a downgrade."""
-    result = subprocess.run(["vercmp", snapshot_version, installed], text=True, capture_output=True)
+class SnapshotBroken(Exception):
+    """Raised when a snapshot can't be safely restored from -- corrupted
+    manifest, or content missing that the manifest claims should be there."""
+
+
+def load_manifest_safe(snap_dir: Path) -> Manifest:
     try:
-        return int(result.stdout.strip()) < 0
-    except ValueError:
-        return False  # can't tell -- don't block on an unparseable result
+        return Manifest.load(snap_dir)
+    except (json.JSONDecodeError, FileNotFoundError, KeyError, TypeError) as exc:
+        raise SnapshotBroken(f"{snap_dir.name}'s manifest.json is missing or corrupted: {exc}") from exc
+
+
+def preflight_issues(m: Manifest, snap_dir: Path) -> list[str]:
+    """Sanity-check the snapshot's own content against what its manifest
+    claims, before touching anything on the live system."""
+    issues = []
+    for e in m.all_path_entries():
+        if not (snap_dir / e.label).exists():
+            issues.append(f"missing content for {e.src} (expected at {e.label})")
+    for pkg in m.packages:
+        if pkg.cached:
+            p = snap_dir / pkg.cached_pkg
+            if not p.exists() or p.stat().st_size == 0:
+                issues.append(f"cached package tarball missing/empty: {pkg.name} {pkg.version}")
+    for u in m.systemd_units:
+        if not (snap_dir / "systemd" / u.name).exists():
+            issues.append(f"missing systemd unit file: {u.name}")
+    for s in m.sddm_sessions:
+        if not (snap_dir / "sddm-sessions" / s).exists():
+            issues.append(f"missing sddm session file: {s}")
+    return issues
 
 
 def categorize_packages(
@@ -41,8 +61,8 @@ def categorize_packages(
     to_install = []
     skipped_newer = []
     for p in cached:
-        installed = _installed_version(p.name)
-        if installed is not None and _would_downgrade(installed, p.version):
+        installed = packages.installed_version(p.name)
+        if installed is not None and packages.would_downgrade(installed, p.version):
             skipped_newer.append((p, installed))
         else:
             to_install.append(p)
@@ -95,30 +115,75 @@ def print_plan(m: Manifest) -> None:
     print("Anything currently at a destination path is moved aside as <path>.pre-restore-<timestamp>, not deleted.")
 
 
-def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False) -> None:
-    m = Manifest.load(snap_dir)
+def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False, force: bool = False) -> bool:
+    """Returns True if the restore (or dry run) completed without hard failure."""
+    try:
+        m = load_manifest_safe(snap_dir)
+    except SnapshotBroken as exc:
+        eprint(f"Refusing to restore: {exc}")
+        eprint("Try a different snapshot (`caelback list`), or `caelback doctor <name>` for details.")
+        return False
+
+    issues = preflight_issues(m, snap_dir)
+    if issues:
+        eprint(f"This snapshot has {len(issues)} integrity problem(s):")
+        for issue in issues:
+            eprint(f"  - {issue}")
+        if not force:
+            eprint("Refusing to restore from a snapshot that fails its own integrity check.")
+            eprint("Pass --force to restore anyway (missing items are skipped either way), or pick another snapshot.")
+            return False
+        eprint("--force given: proceeding despite the above.")
+
     print_plan(m)
 
     if dry_run:
         print("\n(dry run — nothing was changed)")
-        return
+        return True
 
     if not yes and not confirm("\nProceed with restore?"):
         print("Aborted.")
-        return
+        return False
 
     _restore_packages(m, snap_dir)
-    _restore_paths(m, snap_dir)
+    path_records = _restore_paths(m, snap_dir)
     _restore_systemd_units(m, snap_dir)
     _restore_sddm_sessions(m, snap_dir)
     _reclaim_layers(yes=yes)
+    _write_restore_log(snap_dir.parent, m.name, path_records)
+    _reload_hyprland()
 
     print()
     print("Restore complete. For a fully clean state (nothing left running from wherever you")
     print("hopped to), log out and back in through a Hyprland session at the sddm login screen")
     print("rather than staying in the current one.")
     print("Anything that existed at a destination before restore was preserved alongside it")
-    print("with a .pre-restore-<timestamp> suffix, not deleted.")
+    print("with a .pre-restore-<timestamp> suffix, not deleted. `caelback undo` reverts the")
+    print("path changes from this restore if something's wrong.")
+
+    report = verify.verify_restore(m)
+    print(verify.render_report(report))
+    if not report.ok:
+        print("Some checks failed above — the restore ran, but the live system doesn't fully")
+        print("match the snapshot yet. This can be normal right after a restore (e.g. a service")
+        print("that needs the reload/relogin above); recheck with `caelback doctor` if it persists.")
+
+    return report.ok
+
+
+def _reload_hyprland() -> None:
+    result = subprocess.run(["hyprctl", "reload"], capture_output=True, text=True)
+    if result.returncode != 0:
+        eprint("(hyprctl reload failed or Hyprland isn't the active session — skipping, harmless if so)")
+
+
+def _write_restore_log(backup_root: Path, snapshot_name: str, path_records: list[dict]) -> None:
+    data = {
+        "restored_from": snapshot_name,
+        "restored_at": datetime.now().isoformat(timespec="seconds"),
+        "paths": path_records,
+    }
+    (backup_root / RESTORE_LOG_FILE).write_text(json.dumps(data, indent=2) + "\n")
 
 
 def _reclaim_layers(*, yes: bool) -> None:
@@ -160,9 +225,10 @@ def _restore_packages(m: Manifest, snap_dir: Path) -> None:
             print(f"  - {p.name} {p.version}  (try: yay -S {p.name})")
 
 
-def _restore_paths(m: Manifest, snap_dir: Path) -> None:
+def _restore_paths(m: Manifest, snap_dir: Path) -> list[dict]:
     entries = m.all_path_entries()
     print(f"\n== Restoring {len(entries)} path(s) ==")
+    records = []
     for e in entries:
         dest = Path(e.src)
         src_in_snapshot = snap_dir / e.label
@@ -175,6 +241,8 @@ def _restore_paths(m: Manifest, snap_dir: Path) -> None:
         else:
             print(f"  - {dest}")
         copy_path(src_in_snapshot, dest)
+        records.append({"dest": str(dest), "pre_restore_backup": str(backup) if backup else None})
+    return records
 
 
 def _restore_systemd_units(m: Manifest, snap_dir: Path) -> None:

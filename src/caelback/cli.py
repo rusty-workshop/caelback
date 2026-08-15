@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import discovery, layers, packages, retention
+from . import discovery, layers, packages, retention, undo
 from .diff import diff_manifests, render_diff
 from .manifest import Manifest
 from .restore import restore_snapshot
@@ -73,14 +73,22 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def _resolve_and_announce(name: str | None, backup_root: Path) -> Path:
     """Resolve a snapshot name, printing which one was picked and why when
-    the caller didn't specify one explicitly (starred vs. most recent)."""
+    the caller didn't specify one explicitly (starred vs. most recent).
+
+    Deliberately loud about the un-starred fallback -- restoring whatever
+    happens to be "most recent" without anyone having vetted it is exactly
+    how a mid-dotfile-hop snapshot silently became "latest" and got
+    restored in the incident this behavior is designed to prevent.
+    """
     snap = retention.resolve_snapshot(name, backup_root)
     if name is None:
         starred = retention.get_starred(backup_root)
         if starred == snap.name:
             print(f"(using starred snapshot: {snap.name})")
         else:
-            print(f"(using most recent snapshot: {snap.name})")
+            print(f"⚠ No snapshot is starred — defaulting to the most recent one: {snap.name}")
+            print("  This may not be your last known-good state if anything's been snapshotted since.")
+            print(f"  Run `caelback star {snap.name}` (or another name) to pin one explicitly.")
     return snap
 
 
@@ -102,8 +110,14 @@ def cmd_restore(args: argparse.Namespace) -> int:
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
-    restore_snapshot(snap, yes=args.yes, dry_run=args.dry_run)
-    return 0
+    ok = restore_snapshot(snap, yes=args.yes, dry_run=args.dry_run, force=args.force)
+    return 0 if ok else 1
+
+
+def cmd_undo(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    ok = undo.undo_last_restore(backup_root, yes=args.yes)
+    return 0 if ok else 1
 
 
 def cmd_prune(args: argparse.Namespace) -> int:
@@ -348,7 +362,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_restore.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
     p_restore.add_argument("--yes", "-y", action="store_true", help="Don't ask for confirmation")
     p_restore.add_argument("--dry-run", action="store_true", help="Print the restore plan without changing anything")
+    p_restore.add_argument(
+        "--force", action="store_true", help="Restore even if the snapshot fails its own integrity check"
+    )
     p_restore.set_defaults(func=cmd_restore)
+
+    p_undo = sub.add_parser(
+        "undo", parents=[common], help="Revert the path changes from the most recent restore"
+    )
+    p_undo.add_argument("--yes", "-y", action="store_true", help="Don't ask for confirmation")
+    p_undo.set_defaults(func=cmd_undo)
 
     p_prune = sub.add_parser("prune", parents=[common], help="Delete old snapshots, keeping the last N")
     p_prune.add_argument("--keep", type=int, default=retention.DEFAULT_KEEP)

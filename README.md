@@ -30,7 +30,12 @@ combines a few known roots with a fuzzy scan:
   `~/.local/state` whose name contains "caelestia" — this is what catches
   themed third-party apps (Discord clients, zed, btop, spicetify, qtengine,
   browser extensions, whatever else) without needing to know about them by
-  name ahead of time.
+  name ahead of time. Deliberately excludes anything containing
+  `.pre-restore-` — caelback's own leftover backups from a previous restore
+  matched this scan too before that exclusion existed, so an old snapshot
+  could otherwise resurrect stale clutter that had already been cleaned up
+  (the same exclusion is also applied when *reading* an old snapshot's
+  manifest, so an already-taken snapshot with this baked in is harmless too).
 - **Packages**: every installed package whose name contains "caelestia" or
   "quickshell", at their exact installed version. The actual `.pkg.tar.zst`
   is located in `/var/cache/pacman/pkg`, `~/.cache/yay`, or
@@ -104,6 +109,10 @@ caelback uninstall-timer                    # remove it again
 # runs automatically as the last step of `restore`
 caelback reclaim
 caelback reclaim --dry-run
+
+# If a restore turns out to be wrong, revert just its path changes
+# (config/state -- not packages or sddm entries)
+caelback undo
 ```
 
 Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass
@@ -151,6 +160,17 @@ snapshot right away.
 
 ## Restore behavior
 
+- **Pre-flight check first**: before touching anything live, verifies the
+  snapshot's own content matches what its manifest claims (paths present,
+  cached package tarballs non-empty, unit/session files present) and that
+  `manifest.json` itself actually parses. Refuses to restore from a
+  snapshot that fails this, with a clear reason, rather than partially
+  restoring from something broken. `--force` restores anyway (missing
+  items are still individually skipped, same as always).
+- **Won't silently default to an unvetted "most recent"**: if you don't
+  pass a name and nothing's starred, it prints a loud warning naming the
+  snapshot it's about to use and suggesting `caelback star` — see
+  "Starring a snapshot" below for why this matters.
 - Reinstalls the exact cached package versions via `pacman -U` (one sudo
   prompt) — **but only for packages that wouldn't be a downgrade**. If a
   package has been legitimately updated since the snapshot was taken (via
@@ -159,15 +179,41 @@ snapshot right away.
   cached at snapshot time is also skipped, with a warning.
 - Anything already at a destination path is moved aside as
   `<path>.pre-restore-<timestamp>` rather than deleted, so a restore is
-  never destructive to whatever you were trying instead.
+  never destructive to whatever you were trying instead. (Collision-safe:
+  if that exact name is somehow already taken — e.g. `caelback undo`
+  moving aside what a restore just wrote, moments later — a numeric
+  suffix is added instead of silently overwriting the existing backup.)
 - systemd units are copied in, `daemon-reload`d, and re-enabled if they were
   enabled at snapshot time.
 - sddm session entries are copied into `/usr/share/wayland-sessions/` (one
   sudo prompt).
-- As a final step, checks `hyprctl layers` for anything holding a
-  background/bar/overlay layer surface that doesn't look like Caelestia's
-  own (see "Leftover processes" below) and offers to kill it.
+- Checks `hyprctl layers` for anything holding a background/bar/overlay
+  layer surface that doesn't look like Caelestia's own (see "Leftover
+  processes" below) and offers to kill it.
+- Runs `hyprctl reload` automatically so config-level changes (keybinds,
+  window rules) take effect immediately, without waiting for you to
+  remember to do it.
+- **Verifies itself afterward**: re-checks the *live* system against the
+  manifest — every path present, every attempted package actually
+  installed, enabled systemd units actually enabled, sddm entries present,
+  the Caelestia shell process actually running, and (if `livewall` is on
+  `PATH`) `livewall doctor`'s own healthy/unhealthy verdict. Prints a
+  pass/fail report instead of just trusting that each step exited 0 — a
+  step can "succeed" while the live system still isn't right (a service
+  needing the reload above, for instance).
+- Every restore is logged (`last-restore.json` at the backup root) so
+  `caelback undo` can cleanly revert just its path changes if something's
+  wrong — see below.
 - Nothing outside of what's listed in the snapshot's manifest is touched.
+
+## Undo
+
+`caelback undo` reverts the path changes (config/state — not packages or
+sddm entries) from the *most recent* restore, using the log that restore
+writes. Whatever the restore had just written is preserved alongside as
+`<path>.pre-restore-<timestamp>`, not deleted, so undo is itself
+non-destructive. There's no multi-level undo history — it only knows about
+the one most recent restore.
 
 ## Leftover processes from whatever you hopped to
 

@@ -34,6 +34,12 @@ FUZZY_SCAN_ROOTS = [
 FUZZY_SKIP_DIRNAMES = {".git", "node_modules", "__pycache__", ".cache"}
 FUZZY_MATCH_TERM = "caelestia"
 
+# caelback's own move-aside suffix (see util.move_aside). Never treat one of
+# these as real content to back up -- it's a byproduct of a *previous*
+# restore, not current Caelestia state, and re-capturing it would let a
+# stale one get silently resurrected by a future restore.
+CAELBACK_ARTIFACT_MARKER = ".pre-restore-"
+
 PACKAGE_NAME_PATTERNS = ["caelestia", "quickshell"]
 
 SYSTEMD_USER_DIR = HOME / ".config/systemd/user"
@@ -106,8 +112,8 @@ def discover_extra_matches(already_captured: list[Path]) -> list[DiscoveredPath]
             keep = []
             for d in dirnames:
                 candidate = current / d
-                if _is_excluded(candidate, excluded_roots):
-                    continue  # already captured as a named dir, don't double-copy
+                if _is_excluded(candidate, excluded_roots) or CAELBACK_ARTIFACT_MARKER in d:
+                    continue  # already captured as a named dir, or it's caelback's own leftover -- skip either way
                 if FUZZY_MATCH_TERM in d.lower():
                     _add(found, seen, candidate, root)
                     continue  # whole dir captured as one unit, don't descend further
@@ -115,6 +121,8 @@ def discover_extra_matches(already_captured: list[Path]) -> list[DiscoveredPath]
             dirnames[:] = keep
 
             for f in filenames:
+                if CAELBACK_ARTIFACT_MARKER in f:
+                    continue
                 if FUZZY_MATCH_TERM in f.lower():
                     _add(found, seen, current / f, root)
 

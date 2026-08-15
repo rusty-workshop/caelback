@@ -69,10 +69,21 @@ def copy_path(src: Path, dest: Path) -> None:
 
 
 def move_aside(path: Path) -> Path | None:
-    """If path exists, rename it to path.pre-restore-<timestamp> and return the new path."""
+    """If path exists, rename it to path.pre-restore-<timestamp> and return the new path.
+
+    Guards against a same-second collision (e.g. `undo` moving aside what a
+    restore just wrote, moments after that restore ran) -- shutil.move onto
+    an existing path silently replaces it, which would otherwise destroy
+    the very backup this function exists to create.
+    """
     if not path.exists() and not path.is_symlink():
         return None
-    backup = path.with_name(f"{path.name}.pre-restore-{timestamp()}")
+    base = f"{path.name}.pre-restore-{timestamp()}"
+    backup = path.with_name(base)
+    n = 1
+    while backup.exists() or backup.is_symlink():
+        backup = path.with_name(f"{base}-{n}")
+        n += 1
     shutil.move(str(path), str(backup))
     return backup
 
