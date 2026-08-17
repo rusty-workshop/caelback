@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import config as cfgmod
 from . import discovery, layers, packages, retention, undo
+from .banner import print_banner
 from .diff import diff_manifests, render_diff
 from .export import InvalidSnapshotArchive, export_snapshot, import_snapshot
 from .manifest import Manifest
@@ -590,6 +591,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    print_banner()
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

@@ -370,6 +370,7 @@ backup_root = "/mnt/external/caelback"
 keep = 10
 interval_days = 7
 notify = false
+banner = false
 ```
 
 - `backup_root` / `keep` / `interval_days` change the default for
@@ -377,6 +378,7 @@ notify = false
   (on `install-timer`) — pass the flag explicitly on any command to
   override just that one call.
 - `notify = false` turns off desktop notifications entirely (see below).
+- `banner = false` turns off the ASCII-art banner (see below).
 
 Never written by caelback itself — hand-edit it, or delete it to go back
 to the built-in defaults.
@@ -393,6 +395,16 @@ came back clean). This matters most for the unattended `install-timer`
 case — a warning that only ever reaches the systemd journal is a warning
 nobody actually sees. Set `notify = false` in the config file to turn
 these off entirely.
+
+## Banner
+
+Every command prints a small gradient ASCII-art `CAELBACK` banner first —
+purely cosmetic. Only shows up when stdout is an actual terminal: it's
+automatically skipped when output is piped or redirected, so it never
+clutters `install-timer`'s systemd journal output or the `caelback list`
+call the shell completions shell out to for snapshot-name completion.
+Set `banner = false` in the config file to turn it off everywhere,
+including in a real terminal.
 
 ## Shell completion
 
