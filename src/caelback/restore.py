@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import discovery, layers, packages, verify
 from .manifest import Manifest, ManifestPackage
+from .notify import notify
 from .util import confirm, copy_path, eprint, move_aside, run
 
 RESTORE_LOG_FILE = "last-restore.json"
@@ -167,6 +168,12 @@ def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False
         print("Some checks failed above — the restore ran, but the live system doesn't fully")
         print("match the snapshot yet. This can be normal right after a restore (e.g. a service")
         print("that needs the reload/relogin above); recheck with `caelback doctor` if it persists.")
+        failed = ", ".join(c.name for c in report.failures[:5])
+        notify(
+            "caelback restore: some checks failed",
+            f"{len(report.failures)} check(s) failed after restoring {m.name}: {failed}",
+            urgency="critical",
+        )
 
     return report.ok
 

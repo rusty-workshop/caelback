@@ -83,6 +83,12 @@ caelback restore
 
 # Sanity-check a snapshot's contents are all present and non-empty
 caelback doctor
+caelback doctor --all         # check every snapshot, not just one
+
+# Compare two snapshots (defaults to the last two taken)
+caelback diff
+caelback diff 2026-08-12_193000                  # that one vs. starred/latest
+caelback diff 2026-08-01_090000 2026-08-12_193000
 
 # Manually prune old snapshots, keeping the last N (snapshot already
 # does this automatically; default keep is 5)
@@ -311,6 +317,54 @@ still gets flagged and killable, just without a friendly name.
 For a fully clean slate, logging out and back in through a Hyprland session
 works too — it just requires actually doing that instead of staying in the
 current session.
+
+## Comparing snapshots
+
+`caelback diff` renders the same diff that runs automatically after every
+`snapshot`, but on demand and against any two snapshots you choose:
+
+- No args: the last two snapshots taken.
+- One name: that snapshot vs. the starred one (or "most recent" if nothing's
+  starred) — same resolution rules as `restore`/`show`/`doctor`.
+- Two names: exactly those two, in the order given.
+
+Shows added/removed paths, size changes over 15%, package version changes,
+and systemd/sddm entries appearing or disappearing.
+
+## Desktop notifications
+
+Best-effort, via `notify-send` — silently does nothing if it's not
+installed or no notification daemon is running, never blocks or fails
+anything. Fires for the three moments most likely to go unnoticed
+otherwise: an unexpected `snapshot` diff (see "Detecting an unexpected
+snapshot" above), a `restore` whose post-restore verification found
+failures, and a `preview` session ending (says whether the revert-to-star
+came back clean). This matters most for the unattended `install-timer`
+case — a warning that only ever reaches the systemd journal is a warning
+nobody actually sees.
+
+## Shell completion
+
+Tab-completes subcommands, flags, and snapshot names (via `caelback list`).
+
+**fish**:
+
+```bash
+cp completions/caelback.fish ~/.config/fish/completions/caelback.fish
+```
+
+**bash**, either source it directly from `~/.bashrc`:
+
+```bash
+echo 'source /path/to/caelback/completions/caelback.bash' >> ~/.bashrc
+```
+
+or install it system-wide/user-wide so bash-completion picks it up
+automatically:
+
+```bash
+cp completions/caelback.bash ~/.local/share/bash-completion/completions/caelback
+```
 
 ## License
 

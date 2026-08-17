@@ -41,6 +41,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import discovery, retention
+from .notify import notify
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
 from .util import confirm, copy_path, eprint, move_aside
@@ -259,7 +260,7 @@ def _cleanup(snap: Path, before: dict[Path, set[str]], leftovers_dir: Path) -> N
         return
     _cleanup_done = True
     print("\n\n== Ending preview: restoring Caelestia ==")
-    restore_snapshot(snap, yes=True)
+    ok = restore_snapshot(snap, yes=True)
     moved = _sweep_new_entries(before, leftovers_dir)
     if moved:
         print(f"\nAlso found {len(moved)} new top-level item(s) under ~/.config, ~/.local/share,")
@@ -267,6 +268,17 @@ def _cleanup(snap: Path, before: dict[Path, set[str]], leftovers_dir: Path) -> N
         print("caelback tracks -- moved out of the way rather than left live:")
         for m in moved:
             print(f"  - {m}")
+
+    # Ctrl-C/terminal-close might happen while nobody's actually watching this
+    # terminal -- confirm the outcome as a notification too, not just stdout.
+    if ok:
+        notify("caelback preview ended", f"Caelestia restored to {snap.name}.")
+    else:
+        notify(
+            "caelback preview ended -- check needed",
+            f"Restoring {snap.name} reported issues -- run `caelback doctor`.",
+            urgency="critical",
+        )
 
 
 def run_preview(repo_url: str | None, *, backup_root: Path = DEFAULT_BACKUP_ROOT, yes: bool = False) -> int:

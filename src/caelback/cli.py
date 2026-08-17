@@ -10,6 +10,7 @@ from pathlib import Path
 from . import discovery, layers, packages, retention, undo
 from .diff import diff_manifests, render_diff
 from .manifest import Manifest
+from .notify import notify
 from .preview import run_preview
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
@@ -50,6 +51,14 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
                 "wasn't expected (e.g. mid dotfile-hop), run `caelback star <a known-good "
                 "snapshot>` so restore/show/doctor won't default to this one.)"
             )
+            # The snapshot timer runs unattended -- this is the one case where a printed
+            # warning alone could go completely unseen, so also surface it as a notification.
+            notify(
+                f"caelback: {m.name} changed unexpectedly",
+                f"Differs from {prev_manifest.name} -- review with `caelback show`, "
+                "star a known-good snapshot if this wasn't expected.",
+                urgency="critical",
+            )
 
     if args.keep > 0:
         removed = retention.prune(backup_root, keep=args.keep)
@@ -69,6 +78,37 @@ def cmd_list(args: argparse.Namespace) -> int:
         m = Manifest.load(snap)
         marker = "  ★" if snap.name == starred else ""
         print(f"{m.name}  {human_size(m.total_size_bytes()):>10}  {len(m.packages)} pkgs  {snap}{marker}")
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    snaps = retention.list_snapshots(backup_root)
+
+    try:
+        if args.snap1 and args.snap2:
+            a = retention.resolve_snapshot(args.snap1, backup_root)
+            b = retention.resolve_snapshot(args.snap2, backup_root)
+        elif args.snap1:
+            a = retention.resolve_snapshot(args.snap1, backup_root)
+            b = _resolve_and_announce(None, backup_root)  # starred if set, else most recent
+        else:
+            if len(snaps) < 2:
+                print("Need at least 2 snapshots to diff.", file=sys.stderr)
+                return 1
+            a, b = snaps[-2], snaps[-1]
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    ma = Manifest.load(a)
+    mb = Manifest.load(b)
+    print(f"Comparing {ma.name} -> {mb.name}:")
+    d = diff_manifests(ma, mb)
+    if d.is_empty():
+        print("No differences.")
+    else:
+        print(render_diff(d))
     return 0
 
 
@@ -167,42 +207,69 @@ def cmd_unstar(args: argparse.Namespace) -> int:
     return 0
 
 
+def _check_snapshot(snap: Path) -> list[str]:
+    """Integrity issues for one snapshot, as plain strings. Empty = healthy."""
+    m = Manifest.load(snap)
+    issues = []
+
+    for e in m.all_path_entries():
+        if not (snap / e.label).exists():
+            issues.append(f"MISSING: {e.label} (expected content for {e.src})")
+
+    for pkg in m.packages:
+        if pkg.cached:
+            p = snap / pkg.cached_pkg
+            if not p.exists() or p.stat().st_size == 0:
+                issues.append(f"MISSING/EMPTY cached package: {pkg.name} {pkg.version}")
+
+    for u in m.systemd_units:
+        if not (snap / "systemd" / u.name).exists():
+            issues.append(f"MISSING systemd unit: {u.name}")
+
+    for s in m.sddm_sessions:
+        if not (snap / "sddm-sessions" / s).exists():
+            issues.append(f"MISSING sddm session: {s}")
+
+    return issues
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     backup_root = Path(args.backup_root)
+
+    if args.all:
+        snaps = retention.list_snapshots(backup_root)
+        if not snaps:
+            print(f"No snapshots found under {backup_root}")
+            return 0
+        starred = retention.get_starred(backup_root)
+        ok = True
+        for snap in snaps:
+            issues = _check_snapshot(snap)
+            marker = "  ★" if snap.name == starred else ""
+            if issues:
+                ok = False
+                print(f"{snap.name}: {len(issues)} issue(s){marker}")
+                for issue in issues:
+                    print(f"  {issue}")
+            else:
+                print(f"{snap.name}: OK{marker}")
+        print()
+        print(f"{len(snaps)} snapshot(s) checked." if ok else f"{len(snaps)} snapshot(s) checked, some had issues.")
+        return 0 if ok else 1
+
     try:
         snap = _resolve_and_announce(args.name, backup_root)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
 
+    issues = _check_snapshot(snap)
+    for issue in issues:
+        print(issue)
     m = Manifest.load(snap)
-    ok = True
-
-    for e in m.all_path_entries():
-        if not (snap / e.label).exists():
-            print(f"MISSING: {e.label} (expected content for {e.src})")
-            ok = False
-
-    for pkg in m.packages:
-        if pkg.cached:
-            p = snap / pkg.cached_pkg
-            if not p.exists() or p.stat().st_size == 0:
-                print(f"MISSING/EMPTY cached package: {pkg.name} {pkg.version}")
-                ok = False
-
-    for u in m.systemd_units:
-        if not (snap / "systemd" / u.name).exists():
-            print(f"MISSING systemd unit: {u.name}")
-            ok = False
-
-    for s in m.sddm_sessions:
-        if not (snap / "sddm-sessions" / s).exists():
-            print(f"MISSING sddm session: {s}")
-            ok = False
-
-    if ok:
+    if not issues:
         print(f"{snap.name}: OK — all {len(m.all_path_entries())} path(s), {len(m.packages)} package(s) present.")
-    return 0 if ok else 1
+    return 0 if not issues else 1
 
 
 def cmd_reclaim(args: argparse.Namespace) -> int:
@@ -409,7 +476,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = sub.add_parser("doctor", parents=[common], help="Verify a snapshot's integrity")
     p_doctor.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
+    p_doctor.add_argument("--all", action="store_true", help="Check every snapshot instead of just one")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_diff = sub.add_parser(
+        "diff", parents=[common], help="Compare two snapshots (defaults to the last two taken)"
+    )
+    p_diff.add_argument("snap1", nargs="?", default=None, help="First snapshot (default: second-to-last taken)")
+    p_diff.add_argument(
+        "snap2", nargs="?", default=None, help="Second snapshot (default: starred if set, else most recent)"
+    )
+    p_diff.set_defaults(func=cmd_diff)
 
     p_reclaim = sub.add_parser(
         "reclaim",
