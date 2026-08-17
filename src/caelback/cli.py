@@ -10,6 +10,7 @@ from pathlib import Path
 from . import discovery, layers, packages, retention, undo
 from .diff import diff_manifests, render_diff
 from .manifest import Manifest
+from .preview import run_preview
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
 from .util import confirm, eprint, human_size, run
@@ -101,6 +102,11 @@ def cmd_show(args: argparse.Namespace) -> int:
         return 1
     print((snap / "MANIFEST.md").read_text())
     return 0
+
+
+def cmd_preview(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    return run_preview(args.repo, backup_root=backup_root, yes=args.yes)
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
@@ -357,6 +363,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_show = sub.add_parser("show", parents=[common], help="Print a snapshot's manifest")
     p_show.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
     p_show.set_defaults(func=cmd_show)
+
+    p_preview = sub.add_parser(
+        "preview",
+        parents=[common],
+        help="Temporarily try another dotfiles repo, auto-reverting to Caelestia when this terminal exits",
+    )
+    p_preview.add_argument("repo", nargs="?", default=None, help="Repo URL to clone (prompted if omitted)")
+    p_preview.add_argument(
+        "--yes", "-y", action="store_true", help="Don't ask before taking/starring a safety snapshot if none exists"
+    )
+    p_preview.set_defaults(func=cmd_preview)
 
     p_restore = sub.add_parser("restore", parents=[common], help="Restore a snapshot (one-click revert to Caelestia)")
     p_restore.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")

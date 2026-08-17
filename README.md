@@ -113,6 +113,12 @@ caelback reclaim --dry-run
 # If a restore turns out to be wrong, revert just its path changes
 # (config/state -- not packages or sddm entries)
 caelback undo
+
+# Try another dotfiles repo temporarily -- guaranteed to revert to your
+# starred snapshot the moment this terminal exits (Ctrl-C, closing it,
+# or normal completion)
+caelback preview https://github.com/someone/their-dots
+caelback preview          # prompts for the URL instead
 ```
 
 Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass
@@ -214,6 +220,47 @@ writes. Whatever the restore had just written is preserved alongside as
 `<path>.pre-restore-<timestamp>`, not deleted, so undo is itself
 non-destructive. There's no multi-level undo history — it only knows about
 the one most recent restore.
+
+## Preview
+
+`caelback preview <repo-url>` tries another dotfiles repo temporarily,
+guaranteed to revert to your starred snapshot the moment the terminal it's
+running in exits — Ctrl-C, closing the terminal, or normal completion.
+Under the hood, ending a preview just calls the same hardened
+`caelback restore` as everything above, so it inherits all of it: pre-flight
+checks, downgrade-safe packages, `reclaim` killing whatever bar/wallpaper
+daemon the previewed dots spawned, the reload, and the post-restore
+verification report.
+
+What it actually does:
+
+1. Makes sure a starred snapshot exists (offers to take and star one if not
+   — preview refuses to run without a known-good state to guarantee
+   returning to).
+2. Clones the repo into `~/.cache/caelback/preview/<timestamp>-<name>/`.
+3. Looks for a common installer (`install.sh`, `setup.sh`, `bootstrap.sh`)
+   and, if found, asks before running it. If nothing's found, or you say
+   no, the repo is just sitting there cloned — run whatever it needs
+   yourself; the revert-on-exit below still applies for as long as this
+   terminal stays open.
+4. Arms Ctrl-C/terminal-close/normal-exit to trigger the restore, then
+   waits.
+
+**What this can't promise**, stated plainly because "the dots disappear"
+undersells the real limits:
+
+- There's no universal format for dotfiles installers, so caelback can't
+  correctly apply *any* arbitrary repo — it looks for a few common
+  entrypoint names and otherwise leaves running it up to you.
+- Running a third-party install script means running arbitrary code —
+  caelback always asks before doing that, never silently. Only preview
+  repos you actually trust.
+- The auto-revert only undoes what caelback tracks (config, state,
+  packages it manages, systemd units, sddm entries). It can't undo
+  arbitrary side effects an installer might cause outside of that.
+- `kill -9` on the preview process can't be caught by anything, ever —
+  no cleanup runs. The starred snapshot is still there for a manual
+  `caelback restore` in that case.
 
 ## Leftover processes from whatever you hopped to
 
