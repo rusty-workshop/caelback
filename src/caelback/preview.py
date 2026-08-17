@@ -31,6 +31,7 @@ before/after directory listing can fix.
 from __future__ import annotations
 
 import atexit
+import json
 import re
 import shutil
 import signal
@@ -47,6 +48,7 @@ from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
 from .util import confirm, copy_path, eprint, move_aside
 
 PREVIEW_CACHE_DIR = Path.home() / ".cache/caelback/preview"
+PREVIEW_HISTORY_FILE = PREVIEW_CACHE_DIR / "history.jsonl"
 
 # Plain executable scripts to look for, in rough likelihood order. Covers
 # common ad-hoc installers plus a couple of dotfile-manager conventions
@@ -251,10 +253,44 @@ def _ensure_starred(backup_root: Path, *, yes: bool) -> Path | None:
     return snap
 
 
+def _record_preview(entry: dict) -> None:
+    PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with PREVIEW_HISTORY_FILE.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def list_preview_history() -> int:
+    if not PREVIEW_HISTORY_FILE.exists():
+        print("No preview sessions recorded yet.")
+        return 0
+
+    entries = []
+    for line in PREVIEW_HISTORY_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not entries:
+        print("No preview sessions recorded yet.")
+        return 0
+
+    for e in entries:
+        applied = "applied automatically" if e.get("applied") else "not auto-applied (manual/README fallback)"
+        restored = "restored OK" if e.get("restored_ok") else "restore reported issues"
+        print(f"{e.get('started_at', '?')}  {e.get('repo_url', '?')}")
+        print(f"  safety snapshot: {e.get('snapshot', '?')}  |  {applied}  |  {restored}")
+        if e.get("leftovers_moved"):
+            print(f"  {e['leftovers_moved']} untracked new path(s) swept up on exit")
+    return 0
+
+
 _cleanup_done = False
 
 
-def _cleanup(snap: Path, before: dict[Path, set[str]], leftovers_dir: Path) -> None:
+def _cleanup(snap: Path, before: dict[Path, set[str]], leftovers_dir: Path, history: dict) -> None:
     global _cleanup_done
     if _cleanup_done:
         return
@@ -268,6 +304,11 @@ def _cleanup(snap: Path, before: dict[Path, set[str]], leftovers_dir: Path) -> N
         print("caelback tracks -- moved out of the way rather than left live:")
         for m in moved:
             print(f"  - {m}")
+
+    history["ended_at"] = datetime.now().isoformat(timespec="seconds")
+    history["restored_ok"] = ok
+    history["leftovers_moved"] = len(moved)
+    _record_preview(history)
 
     # Ctrl-C/terminal-close might happen while nobody's actually watching this
     # terminal -- confirm the outcome as a notification too, not just stdout.
@@ -325,17 +366,26 @@ def run_preview(repo_url: str | None, *, backup_root: Path = DEFAULT_BACKUP_ROOT
     before = _snapshot_top_level()
     leftovers_dir = dest.parent / f"{dest.name}-leftovers"
 
-    if not apply_repo(dest):
+    applied = apply_repo(dest)
+    if not applied:
         print("\n(Nothing applied automatically. Preview is still armed -- if you apply")
         print("something manually now, it'll still be swept up and reverted on exit.)")
 
+    history = {
+        "repo_url": repo_url,
+        "snapshot": snap.name,
+        "dest": str(dest),
+        "applied": applied,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
     def _handler(signum, frame):
-        _cleanup(snap, before, leftovers_dir)
+        _cleanup(snap, before, leftovers_dir, history)
         sys.exit(1)
 
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, _handler)
-    atexit.register(_cleanup, snap, before, leftovers_dir)
+    atexit.register(_cleanup, snap, before, leftovers_dir, history)
 
     print()
     print(f"Preview active (safety net: {snap.name}).")

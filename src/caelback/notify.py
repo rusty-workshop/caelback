@@ -9,8 +9,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 
+from . import config
+
 
 def notify(title: str, body: str = "", *, urgency: str = "normal") -> None:
+    if not config.load().get("notify", True):
+        return
     if shutil.which("notify-send") is None:
         return
     try:

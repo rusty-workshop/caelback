@@ -1,7 +1,7 @@
 # Fish completion for caelback.
 # Install: cp completions/caelback.fish ~/.config/fish/completions/caelback.fish
 
-set -l __caelback_commands snapshot list show restore undo prune star unstar doctor reclaim cache-missing install-timer uninstall-timer preview diff
+set -l __caelback_commands snapshot list show restore undo prune star unstar doctor reclaim cache-missing install-timer uninstall-timer preview diff export import
 
 function __caelback_snapshot_names
     caelback list 2>/dev/null | string replace -rf '^(\S+).*' '$1'
@@ -29,9 +29,11 @@ complete -c caelback -n "__fish_seen_subcommand_from install-timer" -a install-t
 complete -c caelback -n "__fish_seen_subcommand_from uninstall-timer" -a uninstall-timer -d "Remove the periodic snapshot timer"
 complete -c caelback -n "__fish_seen_subcommand_from preview" -a preview -d "Temporarily try another dotfiles repo"
 complete -c caelback -n "__fish_seen_subcommand_from diff" -a diff -d "Compare two snapshots"
+complete -c caelback -n "__fish_seen_subcommand_from export" -a export -d "Bundle a snapshot into a portable .tar.gz"
+complete -c caelback -n "__fish_seen_subcommand_from import" -a import -d "Import a .tar.gz created by export"
 
 # Snapshot-name completion for commands that take one.
-complete -c caelback -n "__fish_seen_subcommand_from show restore doctor star diff" -a "(__caelback_snapshot_names)" -d "snapshot"
+complete -c caelback -n "__fish_seen_subcommand_from show restore doctor star diff export" -a "(__caelback_snapshot_names)" -d "snapshot"
 
 # Flags, scoped to the subcommand(s) that actually accept them.
 complete -c caelback -l backup-root -d "Where snapshots live" -x
@@ -57,3 +59,7 @@ complete -c caelback -n "__fish_seen_subcommand_from cache-missing" -l yes -s y 
 complete -c caelback -n "__fish_seen_subcommand_from install-timer" -l interval-days -d "Days between automatic snapshots" -x
 
 complete -c caelback -n "__fish_seen_subcommand_from preview" -l yes -s y -d "Don't ask before taking/starring a safety snapshot"
+complete -c caelback -n "__fish_seen_subcommand_from preview" -l list -d "Show past preview sessions instead of starting one"
+
+complete -c caelback -n "__fish_seen_subcommand_from export" -l output -s o -d "Output path or directory" -r
+complete -c caelback -n "__fish_seen_subcommand_from import" -l name -d "Store under this name instead of the one in the archive" -x

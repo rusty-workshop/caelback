@@ -125,6 +125,11 @@ caelback undo
 # or normal completion)
 caelback preview https://github.com/someone/their-dots
 caelback preview          # prompts for the URL instead
+caelback preview --list   # show past preview sessions instead of starting one
+
+# Bundle a snapshot into a single portable file, and bring it back
+caelback export 2026-08-14_134602 --output ~/caelestia.tar.gz
+caelback import ~/caelestia.tar.gz
 ```
 
 Snapshots live under `~/Backups/caelback/<timestamp>/` by default. Pass
@@ -289,6 +294,12 @@ separate, incompatible approaches to begin with:
   no cleanup runs. The starred snapshot is still there for a manual
   `caelback restore` in that case.
 
+`caelback preview --list` shows every past session (recorded when cleanup
+actually runs, so a `kill -9`'d session — the one case nothing can catch —
+won't appear either): the repo URL, which safety snapshot it reverted to,
+whether something applied automatically, and whether the revert came back
+clean. Logged to `~/.cache/caelback/preview/history.jsonl`.
+
 ## Leftover processes from whatever you hopped to
 
 Restoring config files doesn't stop a process another desktop environment's
@@ -331,6 +342,45 @@ current session.
 Shows added/removed paths, size changes over 15%, package version changes,
 and systemd/sddm entries appearing or disappearing.
 
+## Export and import
+
+`caelback export [NAME] [--output PATH]` bundles one snapshot into a single
+portable `.tar.gz` — for moving a snapshot to another machine, or off-site,
+without copying the whole `--backup-root`. Defaults to the starred/latest
+snapshot and `<name>.tar.gz` in the current directory, same resolution
+rules as everywhere else.
+
+`caelback import <archive> [--name NAME]` extracts it back in as a new
+snapshot (under the target `--backup-root`, defaulting to `~/Backups/caelback`
+as usual) and immediately runs the same integrity check `doctor` does, so
+you know right away if anything's missing rather than finding out at
+restore time. Refuses to overwrite an existing snapshot with the same name
+— pass `--name` to import under a different one. Only import archives you
+trust: an archive is just a directory tree, restored later exactly like any
+other snapshot.
+
+## Config file
+
+`~/.config/caelback/config.toml` overrides a few defaults so they don't
+need retyping every time. Entirely optional — nothing changes without one,
+and command-line flags always override it:
+
+```toml
+backup_root = "/mnt/external/caelback"
+keep = 10
+interval_days = 7
+notify = false
+```
+
+- `backup_root` / `keep` / `interval_days` change the default for
+  `--backup-root`, `--keep` (on `snapshot`/`prune`), and `--interval-days`
+  (on `install-timer`) — pass the flag explicitly on any command to
+  override just that one call.
+- `notify = false` turns off desktop notifications entirely (see below).
+
+Never written by caelback itself — hand-edit it, or delete it to go back
+to the built-in defaults.
+
 ## Desktop notifications
 
 Best-effort, via `notify-send` — silently does nothing if it's not
@@ -341,7 +391,8 @@ snapshot" above), a `restore` whose post-restore verification found
 failures, and a `preview` session ending (says whether the revert-to-star
 came back clean). This matters most for the unattended `install-timer`
 case — a warning that only ever reaches the systemd journal is a warning
-nobody actually sees.
+nobody actually sees. Set `notify = false` in the config file to turn
+these off entirely.
 
 ## Shell completion
 

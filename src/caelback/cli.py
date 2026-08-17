@@ -7,11 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import config as cfgmod
 from . import discovery, layers, packages, retention, undo
 from .diff import diff_manifests, render_diff
+from .export import InvalidSnapshotArchive, export_snapshot, import_snapshot
 from .manifest import Manifest
 from .notify import notify
-from .preview import run_preview
+from .preview import list_preview_history, run_preview
 from .restore import restore_snapshot
 from .snapshot import DEFAULT_BACKUP_ROOT, take_snapshot
 from .util import confirm, eprint, human_size, run
@@ -112,6 +114,48 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    try:
+        snap = _resolve_and_announce(args.name, backup_root)
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    output = Path(args.output) if args.output else Path.cwd() / f"{snap.name}.tar.gz"
+    if output.is_dir():
+        output = output / f"{snap.name}.tar.gz"
+
+    print(f"Exporting {snap.name} to {output} ...")
+    export_snapshot(snap, output)
+    print(f"Wrote {human_size(output.stat().st_size)}. Import elsewhere with `caelback import {output.name}`.")
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    archive = Path(args.archive)
+    if not archive.exists():
+        print(f"No such file: {archive}", file=sys.stderr)
+        return 1
+
+    try:
+        dest = import_snapshot(archive, backup_root, name=args.name)
+    except (InvalidSnapshotArchive, FileExistsError) as exc:
+        eprint(str(exc))
+        return 1
+
+    print(f"Imported as {dest.name}.")
+    issues = _check_snapshot(dest)
+    if issues:
+        print(f"⚠ {len(issues)} integrity issue(s) found on import:")
+        for issue in issues:
+            print(f"  {issue}")
+    else:
+        print("Integrity check passed -- all paths and cached packages present.")
+    return 0
+
+
 def _resolve_and_announce(name: str | None, backup_root: Path) -> Path:
     """Resolve a snapshot name, printing which one was picked and why when
     the caller didn't specify one explicitly (starred vs. most recent).
@@ -145,6 +189,8 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
+    if args.list:
+        return list_preview_history()
     backup_root = Path(args.backup_root)
     return run_preview(args.repo, backup_root=backup_root, yes=args.yes)
 
@@ -393,6 +439,14 @@ def cmd_uninstall_timer(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # ~/.config/caelback/config.toml can override these three defaults so they don't
+    # need retyping on every invocation; explicit flags on the command line still win,
+    # since these only change argparse's *default*, not what gets parsed from argv.
+    cfg = cfgmod.load()
+    default_backup_root = cfg.get("backup_root", str(DEFAULT_BACKUP_ROOT))
+    default_keep = cfg.get("keep", retention.DEFAULT_KEEP)
+    default_interval_days = cfg.get("interval_days", 14)
+
     # --backup-root lives only on the subparsers (via this parent), not on the top-level
     # parser too -- argparse subparsers write into the same namespace as the top-level
     # parser, so defining the same dest in both places lets the subparser's default
@@ -400,8 +454,8 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--backup-root",
-        default=str(DEFAULT_BACKUP_ROOT),
-        help=f"Where snapshots live (default: {DEFAULT_BACKUP_ROOT})",
+        default=default_backup_root,
+        help=f"Where snapshots live (default: {default_backup_root})",
     )
 
     parser = argparse.ArgumentParser(
@@ -414,8 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_snap.add_argument(
         "--keep",
         type=int,
-        default=retention.DEFAULT_KEEP,
-        help=f"Keep only the last N snapshots after this one (default: {retention.DEFAULT_KEEP}, 0 disables pruning)",
+        default=default_keep,
+        help=f"Keep only the last N snapshots after this one (default: {default_keep}, 0 disables pruning)",
     )
     p_snap.add_argument(
         "--force",
@@ -440,6 +494,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_preview.add_argument(
         "--yes", "-y", action="store_true", help="Don't ask before taking/starring a safety snapshot if none exists"
     )
+    p_preview.add_argument(
+        "--list", action="store_true", help="Show past preview sessions instead of starting a new one"
+    )
     p_preview.set_defaults(func=cmd_preview)
 
     p_restore = sub.add_parser("restore", parents=[common], help="Restore a snapshot (one-click revert to Caelestia)")
@@ -458,7 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_undo.set_defaults(func=cmd_undo)
 
     p_prune = sub.add_parser("prune", parents=[common], help="Delete old snapshots, keeping the last N")
-    p_prune.add_argument("--keep", type=int, default=retention.DEFAULT_KEEP)
+    p_prune.add_argument("--keep", type=int, default=default_keep)
     p_prune.set_defaults(func=cmd_prune)
 
     p_star = sub.add_parser(
@@ -488,6 +545,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_diff.set_defaults(func=cmd_diff)
 
+    p_export = sub.add_parser("export", parents=[common], help="Bundle a snapshot into a portable .tar.gz")
+    p_export.add_argument("name", nargs="?", default=None, help="Snapshot name (default: starred if set, else latest)")
+    p_export.add_argument(
+        "--output", "-o", default=None, help="Output path or directory (default: <name>.tar.gz in the current directory)"
+    )
+    p_export.set_defaults(func=cmd_export)
+
+    p_import = sub.add_parser("import", parents=[common], help="Import a .tar.gz created by `caelback export`")
+    p_import.add_argument("archive", help="Path to the .tar.gz file")
+    p_import.add_argument("--name", default=None, help="Store under this name instead of the one in the archive")
+    p_import.set_defaults(func=cmd_import)
+
     p_reclaim = sub.add_parser(
         "reclaim",
         help="Kill leftover processes drawing a Hyprland layer that don't look like Caelestia's own",
@@ -507,7 +576,10 @@ def build_parser() -> argparse.ArgumentParser:
         "install-timer", parents=[common], help="Install a systemd --user timer that runs `caelback snapshot` periodically"
     )
     p_install_timer.add_argument(
-        "--interval-days", type=int, default=14, help="Days between automatic snapshots (default: 14)"
+        "--interval-days",
+        type=int,
+        default=default_interval_days,
+        help=f"Days between automatic snapshots (default: {default_interval_days})",
     )
     p_install_timer.set_defaults(func=cmd_install_timer)
 
