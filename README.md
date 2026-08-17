@@ -238,26 +238,47 @@ What it actually does:
    — preview refuses to run without a known-good state to guarantee
    returning to).
 2. Clones the repo into `~/.cache/caelback/preview/<timestamp>-<name>/`.
-3. Looks for a common installer (`install.sh`, `setup.sh`, `bootstrap.sh`)
-   and, if found, asks before running it. If nothing's found, or you say
-   no, the repo is just sitting there cloned — run whatever it needs
-   yourself; the revert-on-exit below still applies for as long as this
-   terminal stays open.
-4. Arms Ctrl-C/terminal-close/normal-exit to trigger the restore, then
-   waits.
+3. Tries to recognize the repo's own convention, most specific first, and
+   always asks before running or copying anything:
+   - **chezmoi** (naming convention: `.chezmoiroot`, `dot_*`/`private_dot_*`
+     files) → `chezmoi init --apply`, if `chezmoi` is installed.
+   - **GNU Stow** (`Stowfile`/`.stowrc` present) → lists top-level
+     directories as candidate packages and asks which to `stow`, if `stow`
+     is installed.
+   - **Makefile with an `install:` target** → `make install`.
+   - **A common installer script** (`install.sh`, `setup.sh`,
+     `bootstrap.sh`, `bootstrap`, `install`, `dotfiles.sh`, `deploy.sh`,
+     `run.sh`, and capitalized variants) → runs it.
+   - **A plain top-level `.config/`** and nothing else recognized → offers
+     to mirror it into `~/.config` (existing content moved aside, not
+     deleted, same as everywhere else in this tool).
+   - **Nothing recognized** → shows the repo's README excerpt and top-level
+     file listing so you can decide quickly, and leaves the repo cloned —
+     apply it yourself; the revert-on-exit below still applies.
+4. Arms Ctrl-C/terminal-close/normal-exit to trigger cleanup, then waits.
 
-**What this can't promise**, stated plainly because "the dots disappear"
-undersells the real limits:
+Cleanup does two things: `restore_snapshot` reverts anything overlapping
+what caelback already tracks, and a before/after listing of the same
+`~/.config`/`~/.local/share`/`~/.local/state` roots discovery scans catches
+any **brand-new** top-level path the preview created that caelback never
+tracked at all (a new app's config directory, say) and moves it out of the
+way too — restore alone can't know about paths that were never part of any
+snapshot.
 
-- There's no universal format for dotfiles installers, so caelback can't
-  correctly apply *any* arbitrary repo — it looks for a few common
-  entrypoint names and otherwise leaves running it up to you.
-- Running a third-party install script means running arbitrary code —
-  caelback always asks before doing that, never silently. Only preview
-  repos you actually trust.
-- The auto-revert only undoes what caelback tracks (config, state,
-  packages it manages, systemd units, sddm entries). It can't undo
-  arbitrary side effects an installer might cause outside of that.
+**What this still can't promise**, stated plainly because "apply any repo
+correctly" isn't an achievable claim — there's no universal dotfiles
+format, which is exactly why chezmoi/stow/dotbot/yadm all exist as
+separate, incompatible approaches to begin with:
+
+- Recognizing more conventions doesn't mean recognizing *all* of them —
+  a repo using something bespoke, or requiring interactive prompts during
+  install, still falls through to "here's the README, good luck."
+- Running a third-party install script or dotfile-manager command means
+  running arbitrary code — caelback always asks before doing that, never
+  silently. Only preview repos you actually trust.
+- Packages an installer's `pacman`/`yay`/etc. calls install aren't tracked
+  or reverted — the new-path sweep only catches new *files*, not new
+  *installed software*.
 - `kill -9` on the preview process can't be caught by anything, ever —
   no cleanup runs. The starred snapshot is still there for a manual
   `caelback restore` in that case.
