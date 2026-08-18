@@ -24,11 +24,21 @@ Rather than a hardcoded list of apps Caelestia is known to theme, `caelback`
 combines a few known roots with a fuzzy scan:
 
 - **Named config dirs**: `~/.config/{hypr,caelestia,livewall}`
+- **Themed app dirs**: `~/.config/{kitty,rofi,waybar,starship,yazi,btop,cava,
+  fastfetch,swaync,qt5ct,qt6ct,quickshell}` — desktop apps Caelestia themes
+  that don't have "caelestia" anywhere in their own path, so the fuzzy scan
+  below can never find them no matter how thoroughly they're customized.
+  Added after a real dotfile-hop restore correctly reverted `~/.config/hypr`
+  but silently left every one of these on the other repo's theming —
+  notifications and Qt apps stuck in a light color scheme, kitty/rofi/waybar/
+  yazi/btop/cava on the other repo's configs, the terminal fetch banner still
+  carrying its branding — invisible until someone actually looked. Only
+  captured if present, so this is harmless on a machine missing some of them.
 - **Named state dirs**: `~/.local/share/caelestia-aw`, `~/.local/state/caelestia`,
   `~/.local/share/livewall`
 - **Fuzzy scan**: anything else under `~/.config`, `~/.local/share`, or
   `~/.local/state` whose name contains "caelestia" — this is what catches
-  themed third-party apps (Discord clients, zed, btop, spicetify, qtengine,
+  themed third-party apps (Discord clients, zed, spicetify, qtengine,
   browser extensions, whatever else) without needing to know about them by
   name ahead of time. Deliberately excludes anything containing
   `.pre-restore-` — caelback's own leftover backups from a previous restore

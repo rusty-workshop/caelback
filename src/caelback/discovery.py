@@ -1,11 +1,25 @@
 """Dynamic discovery of everything Caelestia-related on the live system.
 
-Only a small set of well-known roots are hardcoded (Caelestia's own config/
-state dirs, LiveWall since it's tightly coupled). Everything else -- themed
-third-party apps, browser extensions, whatever shows up next -- is found by
-a fuzzy scan for "caelestia" in path names under ~/.config, ~/.local/share,
-and ~/.local/state, so a new app Caelestia starts theming doesn't require
+A small set of well-known roots are hardcoded (Caelestia's own config/state
+dirs, LiveWall since it's tightly coupled, and the desktop-theming apps
+listed below). Everything else -- themed third-party apps, browser
+extensions, whatever shows up next -- is found by a fuzzy scan for
+"caelestia" in path names under ~/.config, ~/.local/share, and
+~/.local/state, so a new app Caelestia starts theming doesn't require
 updating this file.
+
+The fuzzy scan only catches apps whose *path name* contains "caelestia" --
+it can never find one that doesn't, no matter how thoroughly Caelestia
+themes it. THEMED_APP_DIRS below exists because of exactly that gap: on
+2026-08-18, restoring after a dotfile-hop correctly reverted ~/.config/hypr
+but left qt5ct/qt6ct, swaync, kitty, rofi, waybar, starship, yazi, btop,
+cava, and fastfetch silently on the other repo's (KoolDots) theming --
+notifications and Qt apps stayed in a light Catppuccin-Latte scheme, and
+the terminal fetch banner kept KoolDots' own branding, invisibly, until
+someone noticed. None of those paths contain "caelestia" by name, so no
+fuzzy scan could ever have caught them. This list is grounded in exactly
+the apps the user had *already* judged worth manually backing up before
+that hop -- not a guess at "anything themeable."
 """
 
 from __future__ import annotations
@@ -17,7 +31,17 @@ from pathlib import Path
 
 HOME = Path.home()
 
-NAMED_CONFIG_DIRS = ["hypr", "caelestia", "livewall"]
+# Desktop-theming apps Caelestia customizes but that don't have "caelestia"
+# anywhere in their own config path -- see the module docstring for why this
+# list exists. Only captured if actually present (discover_config_dirs
+# checks existence per-entry), so this is safe even on a machine that
+# doesn't have all of them installed.
+THEMED_APP_DIRS = [
+    "kitty", "rofi", "waybar", "starship", "yazi", "btop", "cava",
+    "fastfetch", "swaync", "qt5ct", "qt6ct", "quickshell",
+]
+
+NAMED_CONFIG_DIRS = ["hypr", "caelestia", "livewall"] + THEMED_APP_DIRS
 
 NAMED_STATE_DIRS = [
     HOME / ".local/share/caelestia-aw",
