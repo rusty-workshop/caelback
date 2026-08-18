@@ -38,6 +38,8 @@ complete -c caelback -n "__fish_seen_subcommand_from show restore doctor star di
 # Flags, scoped to the subcommand(s) that actually accept them.
 complete -c caelback -l backup-root -d "Where snapshots live" -x
 
+complete -c caelback -n "__fish_seen_subcommand_from list" -l json -d "Machine-readable JSON output"
+
 complete -c caelback -n "__fish_seen_subcommand_from snapshot" -l keep -d "Keep only the last N snapshots" -x
 complete -c caelback -n "__fish_seen_subcommand_from snapshot" -l force -d "Snapshot even if Caelestia isn't installed"
 

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Toggles the caelback quickshell panel: kills it if running, launches it if not.
+# Bound to a keybind rather than run directly -- see caelback's README
+# ("Quickshell panel") for the full setup.
+set -euo pipefail
+
+if qs list --all 2>/dev/null | grep -q "quickshell/caelback-panel/shell.qml"; then
+    qs kill -c caelback-panel
+else
+    qs -c caelback-panel -d
+fi

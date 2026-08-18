@@ -80,6 +80,7 @@ caelback snapshot
 
 # See what snapshots exist
 caelback list
+caelback list --json     # machine-readable, for scripting against caelback
 
 # Look at exactly what a snapshot contains
 caelback show                # latest
@@ -438,6 +439,45 @@ automatically:
 ```bash
 cp completions/caelback.bash ~/.local/share/bash-completion/completions/caelback
 ```
+
+## Quickshell panel
+
+`quickshell/shell.qml` is a small, self-contained snapshot browser for
+Hyprland setups running [quickshell](https://quickshell.outfoxxed.me/) —
+lists every snapshot (size, package count, star), lets you star one with a
+click, and has a "Snapshot now" button. It deliberately does **not** offer
+restore from the GUI: restore needs confirmation, sometimes a sudo prompt,
+and can legitimately fail partway, which belongs in a terminal you can
+actually watch, not a one-click button. `caelback restore` stays a
+terminal-only action.
+
+It runs as its own independent, named quickshell config
+(`qs -c caelback-panel`) — completely separate from whatever shell config
+you already run (e.g. Caelestia's own), so installing it can't touch or
+conflict with your existing setup:
+
+```bash
+mkdir -p ~/.config/quickshell/caelback-panel
+cp quickshell/shell.qml ~/.config/quickshell/caelback-panel/shell.qml
+
+cp quickshell/caelback-panel-toggle ~/.local/bin/caelback-panel-toggle
+chmod +x ~/.local/bin/caelback-panel-toggle
+```
+
+`caelback-panel-toggle` kills the panel if it's already running, or
+launches it if not — bind it to a key so the panel opens/closes on demand
+instead of sitting in a bar (handy if yours autohides). In Hyprland's own
+config syntax:
+
+```
+bind = SUPER ALT, B, exec, ~/.local/bin/caelback-panel-toggle
+```
+
+The panel talks to caelback entirely through `caelback list --json` (a
+machine-readable form of `list`, meant for exactly this — scripting
+against caelback rather than parsing the human-readable output) plus
+`caelback star`/`caelback snapshot`, so it stays in sync with whatever the
+CLI does and needs no separate state of its own.
 
 ## License
 

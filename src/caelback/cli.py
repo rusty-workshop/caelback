@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -73,10 +74,33 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
 def cmd_list(args: argparse.Namespace) -> int:
     backup_root = Path(args.backup_root)
     snaps = retention.list_snapshots(backup_root)
+    starred = retention.get_starred(backup_root)
+
+    if args.json:
+        # Machine-readable form for anything scripting against caelback (e.g. the
+        # quickshell panel) -- distinct from the human list format above so neither
+        # has to stay parseable by the other.
+        print(
+            json.dumps(
+                [
+                    {
+                        "name": (m := Manifest.load(snap)).name,
+                        "path": str(snap),
+                        "created_at": m.created_at,
+                        "size_bytes": m.total_size_bytes(),
+                        "size_human": human_size(m.total_size_bytes()),
+                        "package_count": len(m.packages),
+                        "starred": snap.name == starred,
+                    }
+                    for snap in snaps
+                ]
+            )
+        )
+        return 0
+
     if not snaps:
         print(f"No snapshots found under {backup_root}")
         return 0
-    starred = retention.get_starred(backup_root)
     for snap in snaps:
         m = Manifest.load(snap)
         marker = "  ★" if snap.name == starred else ""
@@ -480,6 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_snap.set_defaults(func=cmd_snapshot)
 
     p_list = sub.add_parser("list", parents=[common], help="List existing snapshots")
+    p_list.add_argument("--json", action="store_true", help="Machine-readable JSON output")
     p_list.set_defaults(func=cmd_list)
 
     p_show = sub.add_parser("show", parents=[common], help="Print a snapshot's manifest")
