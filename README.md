@@ -325,9 +325,10 @@ ecosystem, and offers to kill it. This runs automatically at the end of
 
 The actual safety check is deny-by-default and pattern-based, not a
 hardcoded list of "known bad" rice names — anything holding a layer that
-doesn't mention `caelestia`/`quickshell`/`mpvpaper`/`livewall` (or `dunst`,
-this machine's own standing notification daemon) gets flagged, whatever
-it's called, so it catches whatever you hop to *next* too. On top of that,
+doesn't mention `caelestia`/`quickshell`/`mpvpaper`/`livewall` (or `dunst`/
+`swaync`, either of which could be this machine's own standing notification
+daemon) gets flagged, whatever it's called, so it catches whatever you hop
+to *next* too. On top of that,
 a separate, purely cosmetic lookup recognizes common tools by name — Waybar,
 HyprPanel, Ironbar, Polybar, AGS/Astal, eww, Fabric-based bars, swaybg,
 swww, hyprpaper, wpaperd, hyprlock, swaylock, gtklock, wlogout, rofi, wofi,

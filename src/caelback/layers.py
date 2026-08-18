@@ -23,10 +23,14 @@ from pathlib import Path
 
 # Caelestia's own ecosystem, plus standing companion daemons that are a
 # normal, wanted part of this machine's setup and not artifacts of any
-# particular dotfile-hop target (e.g. dunst is this machine's actual
-# notification daemon -- Caelestia's own shell doesn't handle notifications
-# itself, see project_hyprland_de's Loom investigation).
-EXPECTED_PATTERNS = ["caelestia", "quickshell", "mpvpaper", "livewall", "dunst"]
+# particular dotfile-hop target -- Caelestia's own shell doesn't handle
+# notifications itself, see project_hyprland_de's Loom investigation. Both
+# dunst and swaync are listed: a 2026-08-18 dotfile-hop incident confirmed
+# swaync is this machine's actual notification daemon (a manual pre-hop
+# backup of it existed, and it was the one actually running), correcting an
+# earlier assumption that dunst was -- kept dunst too rather than swap one
+# assumption for another, since either could legitimately be in use.
+EXPECTED_PATTERNS = ["caelestia", "quickshell", "mpvpaper", "livewall", "dunst", "swaync"]
 
 # Purely for labeling a flagged process in output -- "this looks like X."
 # Not exhaustive by design (the deny-by-default check above already covers
