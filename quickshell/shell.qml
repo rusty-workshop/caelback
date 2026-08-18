@@ -67,13 +67,18 @@ ShellRoot {
 
     Process {
         id: diffProc
-        stdout: StdioCollector {
-            id: diffCollector
-            onDataChanged: {
-                root.diffText = diffCollector.text
-                root.diffOpen = true
-                root.busy = false
-            }
+        stdout: StdioCollector { id: diffCollector }
+        // onExited (not the collector's onDataChanged) so busy/diffOpen still
+        // resolve even if the diff fails and produces no stdout at all -- e.g.
+        // a snapshot getting pruned between listing it and clicking diff.
+        // caelback prints errors to stderr, which this doesn't capture, so a
+        // failure shows as "no output" rather than the actual reason; good
+        // enough to not leave the panel stuck, not a substitute for checking
+        // the terminal if it happens.
+        onExited: {
+            root.diffText = diffCollector.text || "(no output -- the diff may have failed; check the terminal)"
+            root.diffOpen = true
+            root.busy = false
         }
     }
 
