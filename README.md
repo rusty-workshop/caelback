@@ -1,5 +1,10 @@
 # caelback
 
+![Platform](https://img.shields.io/badge/platform-Caelestia-8A5CF5?logo=linux&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
+
 *(pronounced like "callback")*
 
 Snapshot and one-click restore for a [Caelestia](https://github.com/caelestia-dots/caelestia)
