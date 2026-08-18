@@ -28,17 +28,20 @@ class ManifestDiff:
     removed_sessions: list[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
-        return not (
-            self.added_paths
-            or self.removed_paths
-            or self.resized_paths
-            or self.package_changes
-            or self.added_packages
-            or self.removed_packages
-            or self.added_units
-            or self.removed_units
-            or self.added_sessions
-            or self.removed_sessions
+        return self.total_changes() == 0
+
+    def total_changes(self) -> int:
+        return (
+            len(self.added_paths)
+            + len(self.removed_paths)
+            + len(self.resized_paths)
+            + len(self.package_changes)
+            + len(self.added_packages)
+            + len(self.removed_packages)
+            + len(self.added_units)
+            + len(self.removed_units)
+            + len(self.added_sessions)
+            + len(self.removed_sessions)
         )
 
 

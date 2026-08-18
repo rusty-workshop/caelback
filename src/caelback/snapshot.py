@@ -3,25 +3,15 @@
 from __future__ import annotations
 
 import socket
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from . import discovery, packages
 from .discovery import HOME, DiscoveredPath
 from .manifest import Manifest, ManifestEntry, ManifestPackage, ManifestUnit
-from .util import copy_path, dir_size, timestamp
+from .util import copy_path, dir_size, timestamp, unit_enabled
 
 DEFAULT_BACKUP_ROOT = HOME / "Backups" / "caelback"
-
-
-def _unit_enabled(name: str) -> bool:
-    result = subprocess.run(
-        ["systemctl", "--user", "is-enabled", name],
-        text=True,
-        capture_output=True,
-    )
-    return result.stdout.strip() == "enabled"
 
 
 def _copy_group(entries: list[DiscoveredPath], snap_dir: Path) -> list[ManifestEntry]:
@@ -69,7 +59,7 @@ def take_snapshot(backup_root: Path = DEFAULT_BACKUP_ROOT) -> Path:
         units_dir.mkdir(parents=True, exist_ok=True)
         for name in disc.systemd_units:
             copy_path(discovery.SYSTEMD_USER_DIR / name, units_dir / name)
-            unit_entries.append(ManifestUnit(name=name, enabled=_unit_enabled(name)))
+            unit_entries.append(ManifestUnit(name=name, enabled=unit_enabled(name)))
 
     if disc.sddm_sessions:
         sessions_dir = snap_dir / "sddm-sessions"

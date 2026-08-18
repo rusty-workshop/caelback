@@ -96,6 +96,12 @@ caelback restore
 caelback doctor
 caelback doctor --all         # check every snapshot, not just one
 
+# Compare the *live* system against a snapshot, without changing anything
+caelback verify-live
+
+# Quick overview: starred/latest snapshot, live drift, timer status
+caelback status
+
 # Compare two snapshots (defaults to the last two taken)
 caelback diff
 caelback diff 2026-08-12_193000                  # that one vs. starred/latest
@@ -354,6 +360,26 @@ current session.
 Shows added/removed paths, size changes over 15%, package version changes,
 and systemd/sddm entries appearing or disappearing.
 
+## Checking for live drift
+
+Every other check in caelback compares snapshot vs. snapshot. `caelback
+verify-live` compares the *live* system against a snapshot directly —
+same diff machinery as `caelback diff`, just scanning what's actually on
+disk right now instead of loading a second snapshot, and it changes
+nothing either way. Defaults to the starred/latest snapshot, same
+resolution rules as everywhere else; exits `1` if there's drift so it's
+scriptable. This is the check for "has anything quietly changed since I
+starred this" — the exact class of problem a dotfile-hop can leave behind
+without restore ever running, since restore only reverts what a snapshot
+already tracks.
+
+`caelback status` is a one-screen dashboard covering the same ground plus
+a bit more: the starred snapshot and its `doctor` health, the latest
+snapshot (noted if it's the same as starred), a live-drift summary
+against whichever snapshot restore would actually default to, and
+whether `install-timer`'s systemd timer is installed/enabled/active.
+Meant as the "is everything okay" command to reach for first.
+
 ## Export and import
 
 `caelback export [NAME] [--output PATH]` bundles one snapshot into a single
@@ -446,11 +472,13 @@ cp completions/caelback.bash ~/.local/share/bash-completion/completions/caelback
 `quickshell/shell.qml` is a small, self-contained snapshot browser for
 Hyprland setups running [quickshell](https://quickshell.outfoxxed.me/) —
 lists every snapshot (size, package count, star), lets you star one with a
-click, and has a "Snapshot now" button. It deliberately does **not** offer
-restore from the GUI: restore needs confirmation, sometimes a sudo prompt,
-and can legitimately fail partway, which belongs in a terminal you can
-actually watch, not a one-click button. `caelback restore` stays a
-terminal-only action.
+click, has a "Snapshot now" button, and a ⇄ on every row but the oldest to
+diff that snapshot against the one right before it (opens the same output
+`caelback diff` prints, in a scrollable overlay — click outside or ✕ to
+close). It deliberately does **not** offer restore from the GUI: restore
+needs confirmation, sometimes a sudo prompt, and can legitimately fail
+partway, which belongs in a terminal you can actually watch, not a
+one-click button. `caelback restore` stays a terminal-only action.
 
 It runs as its own independent, named quickshell config
 (`qs -c caelback-panel`) — completely separate from whatever shell config

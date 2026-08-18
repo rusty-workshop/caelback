@@ -38,6 +38,15 @@ def dir_size(path: Path) -> int:
     return total
 
 
+def unit_enabled(name: str) -> bool:
+    result = subprocess.run(
+        ["systemctl", "--user", "is-enabled", name],
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip() == "enabled"
+
+
 def confirm(prompt: str, default: bool = False) -> bool:
     suffix = " [Y/n] " if default else " [y/N] "
     try:

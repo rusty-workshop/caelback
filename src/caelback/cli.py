@@ -13,6 +13,7 @@ from . import discovery, layers, packages, retention, undo
 from .banner import print_banner
 from .diff import diff_manifests, render_diff
 from .export import InvalidSnapshotArchive, export_snapshot, import_snapshot
+from .live import scan_live
 from .manifest import Manifest
 from .notify import notify
 from .preview import list_preview_history, run_preview
@@ -343,6 +344,76 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if not issues else 1
 
 
+def cmd_verify_live(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    try:
+        snap = _resolve_and_announce(args.name, backup_root)
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    m = Manifest.load(snap)
+    print(f"Scanning the live system against {m.name} ...")
+    live = scan_live()
+    d = diff_manifests(m, live)
+    if d.is_empty():
+        print(f"No differences — the live system matches {m.name}.")
+        return 0
+    print(f"Live system differs from {m.name}:")
+    print(render_diff(d))
+    return 1
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    backup_root = Path(args.backup_root)
+    snaps = retention.list_snapshots(backup_root)
+    if not snaps:
+        print(f"No snapshots found under {backup_root}")
+        return 1
+
+    starred = retention.get_starred(backup_root)
+    latest = snaps[-1]
+
+    if starred:
+        starred_path = backup_root / starred
+        if (starred_path / "manifest.json").exists():
+            issues = _check_snapshot(starred_path)
+            health = "OK" if not issues else f"{len(issues)} issue(s)"
+            print(f"Starred snapshot:  {starred}  ({health})")
+        else:
+            print(f"Starred snapshot:  {starred}  (missing on disk!)")
+    else:
+        print("Starred snapshot:  none — restore/show/doctor default to most recent")
+
+    if starred == latest.name:
+        print(f"Latest snapshot:   {latest.name}  (same as starred)")
+    else:
+        print(f"Latest snapshot:   {latest.name}")
+
+    default_snap = retention.resolve_snapshot(None, backup_root)
+    dm = Manifest.load(default_snap)
+    live = scan_live()
+    d = diff_manifests(dm, live)
+    if d.is_empty():
+        print(f"Live vs {default_snap.name}:  no differences")
+    else:
+        print(f"Live vs {default_snap.name}:  {d.total_changes()} difference(s) — run `caelback verify-live` for details")
+
+    timer_unit = Path.home() / ".config/systemd/user" / TIMER_NAME
+    if timer_unit.exists():
+        enabled = subprocess.run(
+            ["systemctl", "--user", "is-enabled", TIMER_NAME], text=True, capture_output=True
+        ).stdout.strip()
+        active = subprocess.run(
+            ["systemctl", "--user", "is-active", TIMER_NAME], text=True, capture_output=True
+        ).stdout.strip()
+        print(f"Snapshot timer:    {enabled}, {active}")
+    else:
+        print("Snapshot timer:    not installed (see `caelback install-timer`)")
+
+    return 0
+
+
 def cmd_reclaim(args: argparse.Namespace) -> int:
     unexpected = layers.find_unexpected_layer_owners()
     if not unexpected:
@@ -561,6 +632,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor.add_argument("name", nargs="?", default=None, help="Snapshot name (default: latest)")
     p_doctor.add_argument("--all", action="store_true", help="Check every snapshot instead of just one")
     p_doctor.set_defaults(func=cmd_doctor)
+
+    p_verify_live = sub.add_parser(
+        "verify-live",
+        parents=[common],
+        help="Compare the live system against a snapshot without changing anything",
+    )
+    p_verify_live.add_argument(
+        "name", nargs="?", default=None, help="Snapshot to compare against (default: starred if set, else most recent)"
+    )
+    p_verify_live.set_defaults(func=cmd_verify_live)
+
+    p_status = sub.add_parser("status", parents=[common], help="Quick overview: starred/latest snapshot, live drift, timer")
+    p_status.set_defaults(func=cmd_status)
 
     p_diff = sub.add_parser(
         "diff", parents=[common], help="Compare two snapshots (defaults to the last two taken)"

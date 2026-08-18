@@ -1,7 +1,7 @@
 # Fish completion for caelback.
 # Install: cp completions/caelback.fish ~/.config/fish/completions/caelback.fish
 
-set -l __caelback_commands snapshot list show restore undo prune star unstar doctor reclaim cache-missing install-timer uninstall-timer preview diff export import
+set -l __caelback_commands snapshot list show restore undo prune star unstar doctor verify-live status reclaim cache-missing install-timer uninstall-timer preview diff export import
 
 function __caelback_snapshot_names
     caelback list 2>/dev/null | string replace -rf '^(\S+).*' '$1'
@@ -23,6 +23,8 @@ complete -c caelback -n "__fish_seen_subcommand_from prune" -a prune -d "Delete 
 complete -c caelback -n "__fish_seen_subcommand_from star" -a star -d "Pin a snapshot as the default"
 complete -c caelback -n "__fish_seen_subcommand_from unstar" -a unstar -d "Remove the star"
 complete -c caelback -n "__fish_seen_subcommand_from doctor" -a doctor -d "Verify snapshot integrity"
+complete -c caelback -n "__fish_seen_subcommand_from verify-live" -a verify-live -d "Compare the live system against a snapshot"
+complete -c caelback -n "__fish_seen_subcommand_from status" -a status -d "Quick overview: snapshots, live drift, timer"
 complete -c caelback -n "__fish_seen_subcommand_from reclaim" -a reclaim -d "Kill leftover layer-drawing processes"
 complete -c caelback -n "__fish_seen_subcommand_from cache-missing" -a cache-missing -d "Cache uncached package tarballs"
 complete -c caelback -n "__fish_seen_subcommand_from install-timer" -a install-timer -d "Install the periodic snapshot timer"
@@ -33,7 +35,7 @@ complete -c caelback -n "__fish_seen_subcommand_from export" -a export -d "Bundl
 complete -c caelback -n "__fish_seen_subcommand_from import" -a import -d "Import a .tar.gz created by export"
 
 # Snapshot-name completion for commands that take one.
-complete -c caelback -n "__fish_seen_subcommand_from show restore doctor star diff export" -a "(__caelback_snapshot_names)" -d "snapshot"
+complete -c caelback -n "__fish_seen_subcommand_from show restore doctor verify-live star diff export" -a "(__caelback_snapshot_names)" -d "snapshot"
 
 # Flags, scoped to the subcommand(s) that actually accept them.
 complete -c caelback -l backup-root -d "Where snapshots live" -x
