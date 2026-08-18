@@ -480,6 +480,14 @@ against caelback rather than parsing the human-readable output) plus
 `caelback star`/`caelback snapshot`, so it stays in sync with whatever the
 CLI does and needs no separate state of its own.
 
+`quickshell/caelback-panel.desktop` adds it to your application launcher
+(rofi/wofi's `drun` mode, or any standard `.desktop`-aware menu) as an
+alternative to the keybind — same toggle behavior either way:
+
+```bash
+cp quickshell/caelback-panel.desktop ~/.local/share/applications/caelback-panel.desktop
+```
+
 ## License
 
 AGPL-3.0-or-later.
