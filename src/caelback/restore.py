@@ -116,6 +116,41 @@ def print_plan(m: Manifest) -> None:
     print("Anything currently at a destination path is moved aside as <path>.pre-restore-<timestamp>, not deleted.")
 
 
+def _confirm_real_restore(m: Manifest) -> bool:
+    """A restore isn't fully risk-free even though nothing is ever deleted --
+    packages get reinstalled, services get restarted, processes get killed,
+    and whatever's live at each restored path gets moved aside right now. A
+    plain y/N is easy to satisfy on autopilot for something that touches
+    this much live state, so proceeding requires typing the snapshot's own
+    name back instead -- can't be muscle-memory'd the way 'y' can, and the
+    name is already on screen above to copy, not something to remember.
+    """
+    to_install, _, _ = categorize_packages(m)
+    print()
+    print("⚠" * 62)
+    print("⚠  THIS CHANGES YOUR LIVE SYSTEM RIGHT NOW")
+    print("⚠" * 62)
+    print(f"Restoring {m.name} will, in this order:")
+    print("  - move aside whatever currently exists at each path listed above")
+    print("    (not deleted, but no longer live -- `caelback undo` reverts only this part)")
+    if to_install:
+        print(f"  - reinstall {len(to_install)} package(s) via `pacman -U` (sudo prompt)")
+    if m.sddm_sessions:
+        print("  - copy sddm session file(s) into /usr/share/wayland-sessions/ (sudo prompt)")
+    print("  - kill any leftover process still drawing a Hyprland layer, if one's found")
+    print("  - run `hyprctl reload`, which can visibly disrupt the current session")
+    print("None of this can be cancelled partway through once it starts.")
+    print("⚠" * 62)
+    try:
+        typed = input(f"\nType the snapshot name to confirm ({m.name}): ").strip()
+    except EOFError:
+        return False
+    if typed != m.name:
+        eprint("Name didn't match -- not proceeding.")
+        return False
+    return True
+
+
 def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False, force: bool = False) -> bool:
     """Returns True if the restore (or dry run) completed without hard failure."""
     try:
@@ -142,7 +177,7 @@ def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False
         print("\n(dry run — nothing was changed)")
         return True
 
-    if not yes and not confirm("\nProceed with restore?"):
+    if not yes and not _confirm_real_restore(m):
         print("Aborted.")
         return False
 

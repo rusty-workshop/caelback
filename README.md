@@ -205,6 +205,15 @@ snapshot right away.
   pass a name and nothing's starred, it prints a loud warning naming the
   snapshot it's about to use and suggesting `caelback star` — see
   "Starring a snapshot" below for why this matters.
+- **A real restore needs more than "y"**: a plain confirmation is easy to
+  satisfy on autopilot for something that reinstalls packages, restarts
+  services, kills processes, and reloads Hyprland — so after the plan
+  above, a real (non-`--dry-run`) restore shows an explicit warning and
+  requires typing the snapshot's own name back to proceed (it's right
+  there on screen to copy). Anything else aborts, nothing touched. Only
+  applies interactively — `--yes` (and `preview`'s automatic revert on
+  exit, which always passes it) skips straight through, since that flag
+  already means "I've decided, don't ask."
 - Reinstalls the exact cached package versions via `pacman -U` (one sudo
   prompt) — **but only for packages that wouldn't be a downgrade**. If a
   package has been legitimately updated since the snapshot was taken (via
