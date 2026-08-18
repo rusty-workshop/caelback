@@ -486,7 +486,14 @@ alternative to the keybind — same toggle behavior either way:
 
 ```bash
 cp quickshell/caelback-panel.desktop ~/.local/share/applications/caelback-panel.desktop
+
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+cp quickshell/caelback.svg ~/.local/share/icons/hicolor/scalable/apps/caelback.svg
 ```
+
+The icon (`quickshell/caelback.svg`) installs through the standard
+`hicolor` fallback theme rather than a hardcoded path, so it resolves
+correctly regardless of which icon theme you're actually running.
 
 ## License
 
