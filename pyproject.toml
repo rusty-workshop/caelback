@@ -1,6 +1,6 @@
 [project]
 name = "caelback"
-version = "0.1.0"
+version = "1.0.0"
 description = "Snapshot and one-click restore for a Caelestia setup, so you can dotfile-hop and come back to exactly what you had"
 readme = "README.md"
 authors = [
