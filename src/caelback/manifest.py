@@ -44,6 +44,7 @@ class Manifest:
     extra_matches: list[ManifestEntry] = field(default_factory=list)
     systemd_units: list[ManifestUnit] = field(default_factory=list)
     sddm_sessions: list[str] = field(default_factory=list)
+    sddm_theme: str | None = None  # theme name; its files live under snapshot_dir/sddm-theme/<name>/
     packages: list[ManifestPackage] = field(default_factory=list)
 
     def all_path_entries(self) -> list[ManifestEntry]:
@@ -81,6 +82,7 @@ class Manifest:
             extra_matches=[ManifestEntry(**e) for e in data.get("extra_matches", [])],
             systemd_units=[ManifestUnit(**u) for u in data.get("systemd_units", [])],
             sddm_sessions=data.get("sddm_sessions", []),
+            sddm_theme=data.get("sddm_theme"),
             packages=[ManifestPackage(**p) for p in data.get("packages", [])],
         )
 
@@ -130,6 +132,10 @@ def render_markdown(m: Manifest) -> str:
         lines.append("_none found_")
     for s in m.sddm_sessions:
         lines.append(f"- `{s}`")
+    lines.append("")
+
+    lines.append("## sddm theme")
+    lines.append(f"- `{m.sddm_theme}`" if m.sddm_theme else "_none detected_")
     lines.append("")
 
     return "\n".join(lines)

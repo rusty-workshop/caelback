@@ -64,6 +64,14 @@ combines a few known roots with a fuzzy scan:
   along with whether each was enabled.
 - **sddm session entries** whose name contains "hyprland" (i.e. the ones
   Caelestia's `~/.config/hypr` actually uses to log in).
+- **The active sddm theme** — whichever theme sddm is *actually* using,
+  files and all, from `/usr/share/sddm/themes/<name>/`. Detected from
+  sddm's own journal log (what it reported loading at your last real
+  login), not by reading `/etc/sddm.conf`/`.conf.d` and guessing which
+  wins — those can disagree with each other and with what's actually
+  active (found live: they did, on this exact machine), so the log is
+  the only source treated as ground truth. Falls back to reading
+  `/etc/sddm.conf` directly only if the journal has nothing.
 
 ## Install
 
@@ -235,6 +243,15 @@ snapshot right away.
   enabled at snapshot time.
 - sddm session entries are copied into `/usr/share/wayland-sessions/` (one
   sudo prompt).
+- The sddm theme's files are copied into `/usr/share/sddm/themes/<name>/`
+  (one sudo prompt) — **but this deliberately never touches
+  `/etc/sddm.conf` or `/etc/sddm.conf.d/`**. That file mixes in settings
+  caelback has no business overwriting (cursor theme, default session,
+  input method, ...), and — per the note above — which one actually wins
+  when multiple exist has already proven unreliable to determine from the
+  files alone. If sddm's currently set to a *different* theme than the
+  one just restored, restore says so and tells you which config file to
+  check, rather than silently rewriting it for you.
 - Checks `hyprctl layers` for anything holding a background/bar/overlay
   layer surface that doesn't look like Caelestia's own (see "Leftover
   processes" below) and offers to kill it.

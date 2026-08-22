@@ -45,6 +45,8 @@ def preflight_issues(m: Manifest, snap_dir: Path) -> list[str]:
     for s in m.sddm_sessions:
         if not (snap_dir / "sddm-sessions" / s).exists():
             issues.append(f"missing sddm session file: {s}")
+    if m.sddm_theme and not (snap_dir / "sddm-theme" / m.sddm_theme).exists():
+        issues.append(f"missing sddm theme files: {m.sddm_theme}")
     return issues
 
 
@@ -105,6 +107,12 @@ def print_plan(m: Manifest) -> None:
         print(f"sddm session entries to restore (needs sudo): {', '.join(m.sddm_sessions)}")
         print()
 
+    if m.sddm_theme:
+        print(f"sddm theme to restore (needs sudo): {m.sddm_theme}")
+        print("  (only its files under /usr/share/sddm/themes/ -- doesn't touch /etc/sddm.conf,")
+        print("   so this won't change which theme is actually selected if that's since drifted)")
+        print()
+
     unexpected = layers.find_unexpected_layer_owners()
     if unexpected:
         print(f"Leftover processes currently drawing a Hyprland layer, not part of Caelestia ({len(unexpected)}):")
@@ -137,6 +145,8 @@ def _confirm_real_restore(m: Manifest) -> bool:
         print(f"  - reinstall {len(to_install)} package(s) via `pacman -U` (sudo prompt)")
     if m.sddm_sessions:
         print("  - copy sddm session file(s) into /usr/share/wayland-sessions/ (sudo prompt)")
+    if m.sddm_theme:
+        print(f"  - copy the '{m.sddm_theme}' sddm theme into /usr/share/sddm/themes/ (sudo prompt)")
     print("  - kill any leftover process still drawing a Hyprland layer, if one's found")
     print("  - run `hyprctl reload`, which can visibly disrupt the current session")
     print("None of this can be cancelled partway through once it starts.")
@@ -185,6 +195,7 @@ def restore_snapshot(snap_dir: Path, *, yes: bool = False, dry_run: bool = False
     path_records = _restore_paths(m, snap_dir)
     _restore_systemd_units(m, snap_dir)
     _restore_sddm_sessions(m, snap_dir)
+    _restore_sddm_theme(m, snap_dir)
     _reclaim_layers(yes=yes)
     _write_restore_log(snap_dir.parent, m.name, path_records)
     _reload_hyprland()
@@ -313,3 +324,31 @@ def _restore_sddm_sessions(m: Manifest, snap_dir: Path) -> None:
             run(["cp", str(snap_dir / "sddm-sessions" / name), f"{discovery.SDDM_SESSIONS_DIR}/{name}"], sudo=True)
         except subprocess.CalledProcessError as exc:
             eprint(f"Could not restore sddm session {name}: {exc}")
+
+
+def _restore_sddm_theme(m: Manifest, snap_dir: Path) -> None:
+    if not m.sddm_theme:
+        return
+    theme_in_snap = snap_dir / "sddm-theme" / m.sddm_theme
+    if not theme_in_snap.exists():
+        eprint(f"  ! sddm theme '{m.sddm_theme}' missing from snapshot, skipping")
+        return
+
+    print(f"\n== Restoring sddm theme '{m.sddm_theme}' (sudo) ==")
+    try:
+        run(["cp", "-r", str(theme_in_snap), f"{discovery.SDDM_THEMES_DIR}/"], sudo=True)
+    except subprocess.CalledProcessError as exc:
+        eprint(f"Could not restore sddm theme: {exc}")
+        return
+
+    # Deliberately doesn't touch /etc/sddm.conf or .conf.d -- that file mixes
+    # in unrelated settings (FacesDir, CursorTheme, DefaultSession, ...) that
+    # a caelback restore shouldn't overwrite, and which theme actually wins
+    # there has already proven unreliable to determine by reading the config
+    # files (see discover_sddm_theme()). Only flag it if there's a live
+    # mismatch, don't silently "fix" it.
+    active = discovery.discover_sddm_theme()
+    if active and active != m.sddm_theme:
+        print(f"  Note: sddm is currently set to use '{active}', not '{m.sddm_theme}'.")
+        print(f"  Restored the files, but didn't touch /etc/sddm.conf -- edit its")
+        print(f"  Current= line yourself if you want '{m.sddm_theme}' selected again.")

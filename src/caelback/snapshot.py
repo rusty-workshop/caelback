@@ -67,6 +67,16 @@ def take_snapshot(backup_root: Path = DEFAULT_BACKUP_ROOT) -> Path:
         for name in disc.sddm_sessions:
             copy_path(discovery.SDDM_SESSIONS_DIR / name, sessions_dir / name)
 
+    # Copied if its directory actually exists; the name is still recorded on
+    # the manifest either way (see below) so a detected-but-missing theme
+    # shows up as a real `doctor`/preflight problem rather than silently
+    # having nothing to restore.
+    sddm_theme = disc.sddm_theme
+    if sddm_theme is not None:
+        theme_src = discovery.SDDM_THEMES_DIR / sddm_theme
+        if theme_src.is_dir():
+            copy_path(theme_src, snap_dir / "sddm-theme" / sddm_theme)
+
     manifest = Manifest(
         name=snap_name,
         created_at=datetime.now().isoformat(timespec="seconds"),
@@ -76,6 +86,7 @@ def take_snapshot(backup_root: Path = DEFAULT_BACKUP_ROOT) -> Path:
         extra_matches=extra_entries,
         systemd_units=unit_entries,
         sddm_sessions=disc.sddm_sessions,
+        sddm_theme=sddm_theme,
         packages=pkg_entries,
     )
     manifest.write(snap_dir)

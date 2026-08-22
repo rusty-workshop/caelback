@@ -26,6 +26,7 @@ class ManifestDiff:
     removed_units: list[str] = field(default_factory=list)
     added_sessions: list[str] = field(default_factory=list)
     removed_sessions: list[str] = field(default_factory=list)
+    theme_change: tuple[str | None, str | None] | None = None  # (old, new), only if they differ
 
     def is_empty(self) -> bool:
         return self.total_changes() == 0
@@ -42,6 +43,7 @@ class ManifestDiff:
             + len(self.removed_units)
             + len(self.added_sessions)
             + len(self.removed_sessions)
+            + (1 if self.theme_change else 0)
         )
 
 
@@ -74,6 +76,8 @@ def diff_manifests(old: Manifest, new: Manifest) -> ManifestDiff:
     old_sessions = set(old.sddm_sessions)
     new_sessions = set(new.sddm_sessions)
 
+    theme_change = (old.sddm_theme, new.sddm_theme) if old.sddm_theme != new.sddm_theme else None
+
     return ManifestDiff(
         added_paths=added_paths,
         removed_paths=removed_paths,
@@ -85,6 +89,7 @@ def diff_manifests(old: Manifest, new: Manifest) -> ManifestDiff:
         removed_units=sorted(old_units - new_units),
         added_sessions=sorted(new_sessions - old_sessions),
         removed_sessions=sorted(old_sessions - new_sessions),
+        theme_change=theme_change,
     )
 
 
@@ -116,4 +121,7 @@ def render_diff(diff: ManifestDiff) -> str:
         lines.append(f"  + new sddm session(s): {_truncated(diff.added_sessions)}")
     if diff.removed_sessions:
         lines.append(f"  - sddm session(s) gone: {_truncated(diff.removed_sessions)}")
+    if diff.theme_change:
+        old_theme, new_theme = diff.theme_change
+        lines.append(f"  ~ sddm theme: {old_theme or '(none)'} -> {new_theme or '(none)'}")
     return "\n".join(lines)

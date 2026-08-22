@@ -25,6 +25,7 @@ that hop -- not a guess at "anything themeable."
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,6 +73,9 @@ SYSTEMD_UNIT_PATTERNS = ["caelestia", "livewall"]
 SDDM_SESSIONS_DIR = Path("/usr/share/wayland-sessions")
 SDDM_SESSION_PATTERN = "hyprland"
 
+SDDM_THEMES_DIR = Path("/usr/share/sddm/themes")
+SDDM_CONFIG_FILE = Path("/etc/sddm.conf")
+
 _ROOT_TAGS = {
     HOME / ".config": "config",
     HOME / ".local/share": "local-share",
@@ -92,6 +96,7 @@ class Discovery:
     extra_matches: list[DiscoveredPath] = field(default_factory=list)
     systemd_units: list[str] = field(default_factory=list)
     sddm_sessions: list[str] = field(default_factory=list)
+    sddm_theme: str | None = None
 
     def all_paths(self) -> list[DiscoveredPath]:
         return self.config_dirs + self.state_dirs + self.extra_matches
@@ -190,6 +195,45 @@ def discover_sddm_sessions() -> list[str]:
     )
 
 
+def discover_sddm_theme() -> str | None:
+    """Which theme sddm is *actually* using -- not which config file claims
+    to set it.
+
+    /etc/sddm.conf and /etc/sddm.conf.d/*.conf can disagree about the
+    `Current` theme (found live on 2026-08-22: sddm.conf said one theme,
+    a conf.d override claimed a different one predating it, and only the
+    sddm log itself said which had actually been loaded at the last real
+    login -- the assumed "conf.d overrides the base file" precedence
+    didn't hold here, or something else about the local setup broke it).
+    Reimplementing sddm's own config-merge logic well enough to trust it
+    isn't worth it when sddm already logs the ground truth: query the
+    current boot's journal for the theme it reported loading, and use
+    that. Falls back to reading sddm.conf's [Theme] Current directly if
+    the journal has nothing (e.g. sddm hasn't logged that line on this
+    sddm version, or the journal's been cleared) -- a best-effort second
+    opinion, not a claim it's authoritative.
+    """
+    result = subprocess.run(
+        ["journalctl", "-u", "sddm", "-b", "--no-pager", "-g", "Loading theme configuration"],
+        text=True,
+        capture_output=True,
+    )
+    lines = [line for line in result.stdout.splitlines() if "Loading theme configuration" in line]
+    if lines:
+        m = re.search(r"themes/([^/\"]+)/theme\.conf", lines[-1])
+        if m:
+            return m.group(1)
+
+    if SDDM_CONFIG_FILE.exists():
+        try:
+            for line in SDDM_CONFIG_FILE.read_text().splitlines():
+                if line.strip().startswith("Current="):
+                    return line.split("=", 1)[1].strip() or None
+        except OSError:
+            pass
+    return None
+
+
 def is_caelestia_present() -> bool:
     """Whether Caelestia itself is actually installed/configured right now.
 
@@ -222,4 +266,5 @@ def discover() -> Discovery:
         extra_matches=extra_matches,
         systemd_units=discover_systemd_units(),
         sddm_sessions=discover_sddm_sessions(),
+        sddm_theme=discover_sddm_theme(),
     )

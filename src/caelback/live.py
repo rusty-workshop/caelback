@@ -44,5 +44,6 @@ def scan_live() -> Manifest:
         extra_matches=_live_group(disc.extra_matches),
         systemd_units=unit_entries,
         sddm_sessions=disc.sddm_sessions,
+        sddm_theme=disc.sddm_theme,
         packages=pkg_entries,
     )
