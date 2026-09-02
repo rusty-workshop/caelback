@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>caelback — snapshot &amp; restore for Caelestia</title>
+<meta name="description" content="caelback: a stdlib-only Python CLI that snapshots and restores your Caelestia (Hyprland) desktop setup, so you can go dotfile-hopping and always get back to exactly what you had.">
+<style>
+  :root {
+    --bg: #0a0c0a;
+    --bg-alt: #0f1310;
+    --panel: #10140f;
+    --border: #1f2a1e;
+    --border-soft: #182018;
+    --fg: #c9d6c6;
+    --fg-dim: #7c8a78;
+    --fg-dimmer: #4d5a4a;
+    --green: #4fdc7a;
+    --green-dim: #2f8f4f;
+    --amber: #e8b04a;
+    --red: #e2564f;
+    --cursor: #4fdc7a;
+    --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.6;
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(79, 220, 122, 0.07), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(232, 176, 74, 0.05), transparent 60%);
+  }
+
+  /* subtle scanline / grain overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.012) 0px,
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    opacity: 0.5;
+  }
+
+  a { color: var(--green); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(10, 12, 10, 0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    max-width: 980px;
+  }
+  .brand {
+    color: var(--fg);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand .dot { color: var(--green); }
+  .brand:hover { text-decoration: none; }
+  .navlinks {
+    display: flex;
+    gap: 22px;
+    font-size: 13px;
+    color: var(--fg-dim);
+  }
+  .navlinks a { color: var(--fg-dim); }
+  .navlinks a:hover { color: var(--green); text-decoration: none; }
+  .navlinks .gh-link {
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: 4px;
+  }
+  .navlinks .gh-link:hover {
+    border-color: var(--green-dim);
+    color: var(--green);
+  }
+
+  @media (max-width: 640px) {
+    .navlinks span.hide-mobile { display: none; }
+  }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    padding: 72px 0 56px;
+  }
+  .kicker {
+    color: var(--green);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+  }
+  .kicker::before { content: "$ "; color: var(--fg-dimmer); }
+
+  h1.title {
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+    margin: 0 0 18px;
+    color: #eef3ec;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  h1.title .accent { color: var(--green); }
+
+  p.pitch {
+    color: var(--fg-dim);
+    font-size: 1.05rem;
+    max-width: 620px;
+    margin: 0 0 30px;
+  }
+  p.pitch code { color: var(--amber); }
+
+  .cta-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid transparent;
+  }
+  .btn:hover { text-decoration: none; }
+  .btn-primary {
+    background: var(--green);
+    color: #06170c;
+  }
+  .btn-primary:hover { background: #6ce894; }
+  .btn-secondary {
+    border-color: var(--border);
+    color: var(--fg);
+  }
+  .btn-secondary:hover { border-color: var(--green-dim); color: var(--green); }
+
+  /* ---------- terminal window ---------- */
+  .term {
+    margin-top: 46px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(79, 220, 122, 0.03);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #0d110d;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .term-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .term-dot.red { background: #e2564f; }
+  .term-dot.yellow { background: #e8b04a; }
+  .term-dot.green { background: #4fdc7a; }
+  .term-title {
+    flex: 1;
+    text-align: center;
+    color: var(--fg-dimmer);
+    font-size: 12px;
+    margin-right: 44px;
+  }
+  .term-body {
+    padding: 20px 22px 26px;
+    min-height: 300px;
+    font-size: 13.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .term-body .prompt { color: var(--green); }
+  .term-body .path { color: var(--amber); }
+  .term-body .out { color: var(--fg-dim); }
+  .term-body .out.hl { color: var(--fg); }
+  .term-body .out .ok { color: var(--green); }
+  .term-body .out .warn { color: var(--amber); }
+  #cursor {
+    display: inline-block;
+    width: 8px;
+    height: 15px;
+    background: var(--cursor);
+    vertical-align: -2px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+  }
+
+  /* ---------- sections ---------- */
+  section { padding: 64px 0; border-top: 1px solid var(--border-soft); }
+  section.no-border { border-top: none; }
+
+  .section-tag {
+    color: var(--fg-dimmer);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .section-tag::before { content: "// "; color: var(--green-dim); }
+
+  h2 {
+    font-size: 1.7rem;
+    color: #eef3ec;
+    margin: 0 0 22px;
+  }
+
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 40px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .why-grid { grid-template-columns: 1fr; }
+  }
+  .why-grid p { color: var(--fg-dim); margin: 0 0 16px; }
+  .why-grid strong { color: var(--fg); }
+
+  .mini-term {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    font-size: 13px;
+    color: var(--fg-dim);
+  }
+  .mini-term .prompt { color: var(--green); }
+  .mini-term .cmt { color: var(--fg-dimmer); }
+  .mini-term .ok { color: var(--green); }
+  .mini-term .bad { color: var(--red); }
+
+  /* ---------- feature grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 20px 22px;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover {
+    border-color: var(--green-dim);
+    transform: translateY(-2px);
+  }
+  .card .glyph {
+    color: var(--green);
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    color: var(--fg);
+  }
+  .card code.cmd {
+    display: inline-block;
+    background: rgba(79, 220, 122, 0.08);
+    color: var(--amber);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12.5px;
+    margin-bottom: 8px;
+  }
+  .card p {
+    margin: 0;
+    color: var(--fg-dim);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  /* ---------- commands reference ---------- */
+  .cmd-table {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  .cmd-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    border-top: 1px solid var(--border-soft);
+  }
+  .cmd-row:first-child { border-top: none; }
+  .cmd-row .name {
+    padding: 11px 16px;
+    color: var(--amber);
+    background: rgba(232, 176, 74, 0.04);
+    border-right: 1px solid var(--border-soft);
+  }
+  .cmd-row .desc {
+    padding: 11px 16px;
+    color: var(--fg-dim);
+  }
+  @media (max-width: 640px) {
+    .cmd-row { grid-template-columns: 1fr; }
+    .cmd-row .name { border-right: none; border-bottom: 1px solid var(--border-soft); }
+  }
+
+  /* ---------- install ---------- */
+  .install-term {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px 24px;
+    font-size: 13.5px;
+  }
+  .install-term .line { margin-bottom: 6px; }
+  .install-term .prompt { color: var(--green); }
+  .install-term .cmt { color: var(--fg-dimmer); }
+
+  .copy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 18px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 10px 14px;
+  }
+  .copy-row code { color: var(--fg); font-size: 13px; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { border-color: var(--green-dim); color: var(--green); }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--border-soft);
+    padding: 34px 0 50px;
+    color: var(--fg-dimmer);
+    font-size: 12.5px;
+  }
+  footer .foot-row {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer a { color: var(--fg-dim); }
+  footer a:hover { color: var(--green); }
+
+  .badge-line {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+  .badge {
+    font-size: 11px;
+    color: var(--fg-dimmer);
+    border: 1px solid var(--border-soft);
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="dot">&gt;_</span> caelback</a>
+    <div class="navlinks">
+      <a href="#why">why</a>
+      <a href="#features">features</a>
+      <a href="#commands">commands</a>
+      <a href="#install">install</a>
+      <a class="gh-link" href="https://github.com/rustyisacat/caelback" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div id="top" class="wrap">
+  <header class="hero">
+    <div class="kicker">dotfile-hopping, without the fear</div>
+    <h1 class="title">Snapshot your rice.<br>Break everything.<br><span class="accent">Get back exactly what you had.</span></h1>
+    <p class="pitch">
+      <strong style="color:var(--fg)">caelback</strong> is a stdlib-only Python CLI that captures
+      your entire <a href="https://github.com/caelestia-dots/caelestia" target="_blank" rel="noopener">Caelestia</a>
+      (Hyprland) setup — configs, themed apps, exact package versions, systemd units, sddm sessions —
+      so trying someone else's dotfiles is a <code>caelback restore</code> away from being undone.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">Install caelback</a>
+      <a class="btn btn-secondary" href="https://github.com/rustyisacat/caelback" target="_blank" rel="noopener">View source on GitHub</a>
+    </div>
+
+    <div class="term">
+      <div class="term-bar">
+        <div class="term-dot red"></div>
+        <div class="term-dot yellow"></div>
+        <div class="term-dot green"></div>
+        <div class="term-title">rusty@arch: ~/dotfile-hopping</div>
+      </div>
+      <div class="term-body" id="termBody"></div>
+    </div>
+  </header>
+</div>
+
+<div class="wrap">
+
+  <section id="why" class="no-border">
+    <div class="section-tag">the problem</div>
+    <h2>Caelestia is wired into everything</h2>
+    <div class="why-grid">
+      <div>
+        <p>
+          Caelestia doesn't just live in <code style="color:var(--amber)">~/.config/hypr</code>. It themes
+          a pile of third-party apps — kitty, rofi, waybar, yazi, btop, cava, fastfetch, swaync,
+          the Qt5/Qt6 style engines — ships systemd units, pins fast-moving AUR packages like
+          <code style="color:var(--amber)">quickshell-git</code> at exact versions, and picks the sddm
+          session that actually logs you in.
+        </p>
+        <p>
+          Manually tracking all of that before trying a different rice is tedious and easy to get
+          wrong. <strong>One real dotfile-hop restore correctly reverted <code style="color:var(--amber)">~/.config/hypr</code>
+          and silently left everything else on the other repo's theming</strong> — notifications and
+          Qt apps stuck in a light color scheme, the terminal fetch banner still carrying someone
+          else's branding. Invisible until you actually looked.
+        </p>
+        <p>
+          <code style="color:var(--amber)">caelback</code> finds all of it automatically — named
+          roots plus a fuzzy scan for anything else with "caelestia" in its path — so a snapshot
+          is actually complete, and a restore actually verifies it landed.
+        </p>
+      </div>
+      <div class="mini-term">
+        <div><span class="prompt">$</span> caelback restore</div>
+        <div class="cmt">restoring snapshot 2026-08-30_211004...</div>
+        <div><span class="ok">✓</span> hypr, caelestia, livewall</div>
+        <div><span class="ok">✓</span> kitty, rofi, waybar, yazi, btop, cava</div>
+        <div><span class="ok">✓</span> swaync, qt5ct, qt6ct, quickshell</div>
+        <div><span class="ok">✓</span> systemd --user units re-enabled</div>
+        <div><span class="ok">✓</span> sddm session restored</div>
+        <div><span class="ok">✓</span> 4 packages restored at pinned versions</div>
+        <div><span class="ok">✓</span> post-restore verification passed</div>
+        <div class="cmt" style="margin-top:8px">live system checked, not just exit codes</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="section-tag">capabilities</div>
+    <h2>What it actually does</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="glyph">01</div>
+        <code class="cmd">caelback snapshot</code>
+        <h3>Full-fidelity snapshots</h3>
+        <p>Config dirs, themed apps, state dirs, systemd units, sddm sessions, and exact package
+          versions — found by combining known roots with a fuzzy scan, not a hardcoded list.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">02</div>
+        <code class="cmd">caelback restore</code>
+        <h3>Restore that verifies itself</h3>
+        <p>Post-restore, caelback re-checks the <em>live system</em> actually matches what was
+          restored — not just that the restore commands exited 0.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">03</div>
+        <code class="cmd">caelback undo</code>
+        <h3>Undo the undo</h3>
+        <p>Restores create a pre-restore backup automatically, so even a restore itself can be
+          walked back if it wasn't what you wanted.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">04</div>
+        <code class="cmd">caelback star</code>
+        <h3>Star a trusted default</h3>
+        <p>Pin a known-good snapshot as your trusted baseline. Starred snapshots are exempt from
+          <code style="color:var(--amber)">prune</code>, so your safety net never gets swept.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">05</div>
+        <code class="cmd">caelback preview &lt;repo-url&gt;</code>
+        <h3>Try before you commit</h3>
+        <p>Auto-detects chezmoi, stow, a Makefile, or an install script in an unfamiliar dotfiles
+          repo and applies it — with automatic revert on Ctrl-C or exit.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">06</div>
+        <code class="cmd">caelback reclaim</code>
+        <h3>Kill the stragglers</h3>
+        <p>Config restores don't kill running processes. <code style="color:var(--amber)">reclaim</code>
+          finds and kills leftover bars/wallpaper daemons from an abandoned setup.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">07</div>
+        <code class="cmd">caelback cache-missing</code>
+        <h3>Offline-exact package restore</h3>
+        <p>Package tarballs are cached locally at snapshot time. Anything an AUR helper didn't
+          keep around gets fetched or rebuilt so restore never needs the network.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">08</div>
+        <code class="cmd">caelback doctor --all</code>
+        <h3>Diagnose before you trust it</h3>
+        <p>Sanity-checks snapshots and the live environment so a broken restore is caught before
+          you need it, not during a crisis.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">09</div>
+        <code class="cmd">caelback diff / export / import</code>
+        <h3>Inspect, move, share</h3>
+        <p>Diff two snapshots, export one to a portable archive, or import one on another
+          machine — the same snapshot format either way.</p>
+      </div>
+      <div class="card">
+        <div class="glyph">10</div>
+        <code class="cmd">SUPER + ALT + B</code>
+        <h3>Quickshell GUI panel</h3>
+        <p>A read-only panel for browsing and starring snapshots at a glance. Restoring stays
+          CLI-only on purpose — it can need sudo and explicit confirmation.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="commands">
+    <div class="section-tag">reference</div>
+    <h2>All 17 subcommands</h2>
+    <div class="cmd-table">
+      <div class="cmd-row"><div class="name">snapshot</div><div class="desc">Capture the current Caelestia setup.</div></div>
+      <div class="cmd-row"><div class="name">list</div><div class="desc">List all snapshots (<code style="color:var(--fg-dim)">--json</code> for scripting).</div></div>
+      <div class="cmd-row"><div class="name">show</div><div class="desc">Inspect exactly what a snapshot contains.</div></div>
+      <div class="cmd-row"><div class="name">restore</div><div class="desc">Restore a snapshot, then verify it landed.</div></div>
+      <div class="cmd-row"><div class="name">undo</div><div class="desc">Revert the most recent restore.</div></div>
+      <div class="cmd-row"><div class="name">prune</div><div class="desc">Delete old, unstarred snapshots.</div></div>
+      <div class="cmd-row"><div class="name">star / unstar</div><div class="desc">Pin or unpin a trusted-default snapshot.</div></div>
+      <div class="cmd-row"><div class="name">doctor [--all]</div><div class="desc">Diagnose snapshots and the live environment.</div></div>
+      <div class="cmd-row"><div class="name">reclaim</div><div class="desc">Kill leftover processes from an abandoned setup.</div></div>
+      <div class="cmd-row"><div class="name">cache-missing</div><div class="desc">Fetch/build tarballs for uncached packages.</div></div>
+      <div class="cmd-row"><div class="name">install-timer / uninstall-timer</div><div class="desc">Manage a scheduled auto-snapshot systemd timer.</div></div>
+      <div class="cmd-row"><div class="name">preview &lt;repo-url&gt;</div><div class="desc">Try an unfamiliar dotfiles repo with auto-revert.</div></div>
+      <div class="cmd-row"><div class="name">diff</div><div class="desc">Compare two snapshots.</div></div>
+      <div class="cmd-row"><div class="name">export / import</div><div class="desc">Move a snapshot to/from a portable archive.</div></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="section-tag">get started</div>
+    <h2>Install</h2>
+    <div class="install-term">
+      <div class="line"><span class="cmt"># requires uv — https://docs.astral.sh/uv/</span></div>
+      <div class="line"><span class="prompt">$</span> git clone https://github.com/rustyisacat/caelback.git</div>
+      <div class="line"><span class="prompt">$</span> cd caelback</div>
+      <div class="line"><span class="prompt">$</span> uv tool install --editable .</div>
+      <div class="line" style="margin-top:10px"><span class="cmt"># take your first snapshot</span></div>
+      <div class="line"><span class="prompt">$</span> caelback snapshot</div>
+    </div>
+    <div class="copy-row">
+      <code id="installCmd">git clone https://github.com/rustyisacat/caelback.git &amp;&amp; cd caelback &amp;&amp; uv tool install --editable .</code>
+      <button class="copy-btn" onclick="copyInstall()">copy</button>
+    </div>
+    <div class="badge-line">
+      <span class="badge">Python 3.12+</span>
+      <span class="badge">stdlib only, zero deps</span>
+      <span class="badge">uv-managed</span>
+      <span class="badge">Arch Linux + Hyprland</span>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-row">
+      <div>caelback — snapshot &amp; restore for Caelestia. Licensed <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0-or-later</a>.</div>
+      <div><a href="https://github.com/rustyisacat/caelback" target="_blank" rel="noopener">github.com/rustyisacat/caelback</a></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var lines = [
+    { type: "cmd", text: "caelback snapshot" },
+    { type: "out", text: "snapshotting current Caelestia setup...\n" +
+        "  <span class=\"hl\">hypr, caelestia, livewall</span> ... captured\n" +
+        "  <span class=\"hl\">kitty, rofi, waybar, yazi, btop, cava</span> ... captured\n" +
+        "  <span class=\"hl\">swaync, qt5ct, qt6ct, quickshell</span> ... captured\n" +
+        "  packages: <span class=\"hl\">quickshell-git, caelestia-shell-git</span> ... cached\n" +
+        "  systemd --user units ... captured\n" +
+        "  sddm session (hyprland) ... captured\n" +
+        "<span class=\"ok\">✓ snapshot 2026-09-02_141207 saved</span>" },
+    { type: "cmd", text: "caelback preview github.com/rice-god/dots" },
+    { type: "out", text: "detected: chezmoi\n" +
+        "applying preview... <span class=\"ok\">done</span>\n" +
+        "<span class=\"warn\">press Ctrl-C anytime to auto-revert</span>" },
+    { type: "cmd", text: "caelback restore --star" },
+    { type: "out", text: "restoring snapshot 2026-09-02_141207...\n" +
+        "  reclaiming leftover processes ... <span class=\"ok\">2 killed</span>\n" +
+        "  restoring configs, packages, systemd, sddm ... <span class=\"ok\">done</span>\n" +
+        "  verifying live system matches snapshot ... <span class=\"ok\">✓ verified</span>\n" +
+        "<span class=\"ok\">✓ back to exactly what you had</span>" }
+  ];
+
+  var el = document.getElementById("termBody");
+  var lineIdx = 0, charIdx = 0;
+  var typingSpeed = 22;
+
+  function renderStatic() {
+    var html = "";
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].type === "cmd") {
+        html += '<span class="prompt">$</span> ' + escapeHtml(lines[i].text) + "\n";
+      } else {
+        html += '<span class="out">' + lines[i].text + "</span>\n\n";
+      }
+    }
+    return html;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (reduceMotion) {
+    el.innerHTML = renderStatic();
+    return;
+  }
+
+  function typeNext() {
+    if (lineIdx >= lines.length) {
+      el.innerHTML += '<span id="cursor"></span>';
+      return;
+    }
+    var line = lines[lineIdx];
+
+    if (line.type === "cmd") {
+      if (charIdx === 0) {
+        el.innerHTML += '<span class="prompt">$</span> <span class="typing"></span>';
+      }
+      var typingEl = el.querySelector(".typing");
+      if (charIdx <= line.text.length) {
+        typingEl.textContent = line.text.slice(0, charIdx);
+        typingEl.innerHTML += '<span id="cursor"></span>';
+        charIdx++;
+        setTimeout(typeNext, typingSpeed + Math.random() * 30);
+        return;
+      } else {
+        // finalize line, strip cursor/class wrapper
+        var finalHtml = el.innerHTML.replace(
+          /<span class="prompt">\$<\/span> <span class="typing">[^]*$/,
+          '<span class="prompt">$</span> ' + escapeHtml(line.text)
+        );
+        el.innerHTML = finalHtml + "\n";
+        lineIdx++;
+        charIdx = 0;
+        setTimeout(typeNext, 250);
+        return;
+      }
+    } else {
+      el.innerHTML += '<span class="out">' + line.text + "</span>\n\n";
+      lineIdx++;
+      charIdx = 0;
+      setTimeout(typeNext, 450);
+      return;
+    }
+  }
+
+  typeNext();
+})();
+
+function copyInstall() {
+  var text = document.getElementById("installCmd").textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function () {
+      var btn = event.target;
+      var old = btn.textContent;
+      btn.textContent = "copied";
+      setTimeout(function () { btn.textContent = old; }, 1400);
+    });
+  }
+}
+</script>
+
+</body>
+</html>
