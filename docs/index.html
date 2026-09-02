@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>caelback — snapshot &amp; restore for Caelestia</title>
+<title>caelback: snapshot &amp; restore for Caelestia</title>
 <meta name="description" content="caelback: a stdlib-only Python CLI that snapshots and restores your Caelestia (Hyprland) desktop setup, so you can go dotfile-hopping and always get back to exactly what you had.">
 <style>
   :root {
@@ -429,8 +429,8 @@
     <p class="pitch">
       <strong style="color:var(--fg)">caelback</strong> is a stdlib-only Python CLI that captures
       your entire <a href="https://github.com/caelestia-dots/caelestia" target="_blank" rel="noopener">Caelestia</a>
-      (Hyprland) setup — configs, themed apps, exact package versions, systemd units, sddm sessions —
-      so trying someone else's dotfiles is a <code>caelback restore</code> away from being undone.
+      (Hyprland) setup: configs, themed apps, exact package versions, systemd units, sddm sessions,
+      all of it. Trying someone else's dotfiles is just a <code>caelback restore</code> away from being undone.
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">Install caelback</a>
@@ -458,21 +458,21 @@
       <div>
         <p>
           Caelestia doesn't just live in <code style="color:var(--amber)">~/.config/hypr</code>. It themes
-          a pile of third-party apps — kitty, rofi, waybar, yazi, btop, cava, fastfetch, swaync,
-          the Qt5/Qt6 style engines — ships systemd units, pins fast-moving AUR packages like
+          a pile of third-party apps, including kitty, rofi, waybar, yazi, btop, cava, fastfetch, swaync,
+          and the Qt5/Qt6 style engines. It also ships systemd units, pins fast-moving AUR packages like
           <code style="color:var(--amber)">quickshell-git</code> at exact versions, and picks the sddm
           session that actually logs you in.
         </p>
         <p>
           Manually tracking all of that before trying a different rice is tedious and easy to get
           wrong. <strong>One real dotfile-hop restore correctly reverted <code style="color:var(--amber)">~/.config/hypr</code>
-          and silently left everything else on the other repo's theming</strong> — notifications and
-          Qt apps stuck in a light color scheme, the terminal fetch banner still carrying someone
-          else's branding. Invisible until you actually looked.
+          but silently left everything else on the other repo's theming:</strong> notifications and
+          Qt apps stuck in a light color scheme, and the terminal fetch banner still carrying someone
+          else's branding. It was invisible until you actually looked.
         </p>
         <p>
-          <code style="color:var(--amber)">caelback</code> finds all of it automatically — named
-          roots plus a fuzzy scan for anything else with "caelestia" in its path — so a snapshot
+          <code style="color:var(--amber)">caelback</code> finds all of it automatically, combining named
+          roots with a fuzzy scan for anything else with "caelestia" in its path, so a snapshot
           is actually complete, and a restore actually verifies it landed.
         </p>
       </div>
@@ -500,14 +500,14 @@
         <code class="cmd">caelback snapshot</code>
         <h3>Full-fidelity snapshots</h3>
         <p>Config dirs, themed apps, state dirs, systemd units, sddm sessions, and exact package
-          versions — found by combining known roots with a fuzzy scan, not a hardcoded list.</p>
+          versions, found by combining known roots with a fuzzy scan instead of a hardcoded list.</p>
       </div>
       <div class="card">
         <div class="glyph">02</div>
         <code class="cmd">caelback restore</code>
         <h3>Restore that verifies itself</h3>
-        <p>Post-restore, caelback re-checks the <em>live system</em> actually matches what was
-          restored — not just that the restore commands exited 0.</p>
+        <p>Post-restore, caelback re-checks that the <em>live system</em> actually matches what was
+          restored, instead of just trusting that the restore commands exited 0.</p>
       </div>
       <div class="card">
         <div class="glyph">03</div>
@@ -528,7 +528,7 @@
         <code class="cmd">caelback preview &lt;repo-url&gt;</code>
         <h3>Try before you commit</h3>
         <p>Auto-detects chezmoi, stow, a Makefile, or an install script in an unfamiliar dotfiles
-          repo and applies it — with automatic revert on Ctrl-C or exit.</p>
+          repo and applies it, with automatic revert on Ctrl-C or exit.</p>
       </div>
       <div class="card">
         <div class="glyph">06</div>
@@ -556,14 +556,14 @@
         <code class="cmd">caelback diff / export / import</code>
         <h3>Inspect, move, share</h3>
         <p>Diff two snapshots, export one to a portable archive, or import one on another
-          machine — the same snapshot format either way.</p>
+          machine; it's the same snapshot format either way.</p>
       </div>
       <div class="card">
         <div class="glyph">10</div>
         <code class="cmd">SUPER + ALT + B</code>
         <h3>Quickshell GUI panel</h3>
         <p>A read-only panel for browsing and starring snapshots at a glance. Restoring stays
-          CLI-only on purpose — it can need sudo and explicit confirmation.</p>
+          CLI-only on purpose, since it can need sudo and explicit confirmation.</p>
       </div>
     </div>
   </section>
@@ -593,7 +593,7 @@
     <div class="section-tag">get started</div>
     <h2>Install</h2>
     <div class="install-term">
-      <div class="line"><span class="cmt"># requires uv — https://docs.astral.sh/uv/</span></div>
+      <div class="line"><span class="cmt"># requires uv, see https://docs.astral.sh/uv/</span></div>
       <div class="line"><span class="prompt">$</span> git clone https://github.com/rustyisacat/caelback.git</div>
       <div class="line"><span class="prompt">$</span> cd caelback</div>
       <div class="line"><span class="prompt">$</span> uv tool install --editable .</div>
@@ -617,7 +617,7 @@
 <footer>
   <div class="wrap">
     <div class="foot-row">
-      <div>caelback — snapshot &amp; restore for Caelestia. Licensed <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0-or-later</a>.</div>
+      <div>caelback: snapshot &amp; restore for Caelestia. Licensed <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0-or-later</a>.</div>
       <div><a href="https://github.com/rustyisacat/caelback" target="_blank" rel="noopener">github.com/rustyisacat/caelback</a></div>
     </div>
   </div>
