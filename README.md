@@ -2,8 +2,10 @@
 
 ![Platform](https://img.shields.io/badge/platform-Caelestia-8A5CF5?logo=linux&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
-![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Frustyisacat%2Fcaelback%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version)
+![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Frusty-workshop%2Fcaelback%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version)
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
+
+🌐 **[Live site](https://caelback.rusty.is-a.dev/)**
 
 *(pronounced like "callback")*
 
@@ -78,7 +80,7 @@ combines a few known roots with a fuzzy scan:
 Requires [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/rustyisacat/caelback.git
+git clone https://github.com/rusty-workshop/caelback.git
 cd caelback
 uv tool install --editable .
 ```
