@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow1" cx="15%" cy="0%" r="60%">
+      <stop offset="0%" stop-color="#4fdc7a" stop-opacity="0.10"/>
+      <stop offset="60%" stop-color="#4fdc7a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="100%" cy="10%" r="55%">
+      <stop offset="0%" stop-color="#e8b04a" stop-opacity="0.08"/>
+      <stop offset="60%" stop-color="#e8b04a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0a0c0a"/>
+  <rect width="1200" height="630" fill="url(#glow1)"/>
+  <rect width="1200" height="630" fill="url(#glow2)"/>
+
+  <!-- outer frame -->
+  <rect x="40" y="40" width="1120" height="550" rx="16" fill="#10140f" stroke="#1f2a1e" stroke-width="2"/>
+
+  <!-- term bar -->
+  <rect x="40" y="40" width="1120" height="46" rx="16" fill="#0d110d"/>
+  <rect x="40" y="70" width="1120" height="16" fill="#0d110d"/>
+  <line x1="40" y1="86" x2="1160" y2="86" stroke="#182018" stroke-width="2"/>
+  <circle cx="70" cy="63" r="6" fill="#e2564f"/>
+  <circle cx="92" cy="63" r="6" fill="#e8b04a"/>
+  <circle cx="114" cy="63" r="6" fill="#4fdc7a"/>
+  <text x="600" y="68" text-anchor="middle" font-family="'JetBrains Mono','Fira Code',monospace" font-size="14" fill="#4d5a4a">rusty@arch: ~/dotfile-hopping</text>
+
+  <!-- big glyph mark -->
+  <path d="M96 190 L196 260 L96 330" fill="none" stroke="#4fdc7a" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="220" y="304" width="52" height="22" rx="3" fill="#4fdc7a"/>
+
+  <!-- brand -->
+  <text x="94" y="400" font-family="'JetBrains Mono','Fira Code',monospace" font-size="30" font-weight="700" fill="#c9d6c6">caelback</text>
+
+  <!-- headline -->
+  <text x="94" y="452" font-family="'JetBrains Mono','Fira Code',monospace" font-size="42" font-weight="700" fill="#eef3ec">Snapshot your rice.</text>
+  <text x="94" y="502" font-family="'JetBrains Mono','Fira Code',monospace" font-size="42" font-weight="700" fill="#eef3ec">Break everything.</text>
+  <text x="94" y="552" font-family="'JetBrains Mono','Fira Code',monospace" font-size="42" font-weight="700" fill="#4fdc7a">Get back exactly what you had.</text>
+
+  <!-- kicker -->
+  <text x="94" y="150" font-family="'JetBrains Mono','Fira Code',monospace" font-size="20" fill="#4fdc7a">$ dotfile-hopping, without the fear</text>
+</svg>
